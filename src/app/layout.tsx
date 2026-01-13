@@ -20,6 +20,8 @@ export const metadata: Metadata = {
 };
 
 import { Navbar } from "@/modules/home/components/navbar";
+import { SyncUser } from "@/components/sync-user";
+import { Toaster } from "@/components/ui/sonner";
 
 export default function RootLayout({
   children,
@@ -33,8 +35,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <ClerkProvider>
+          <SyncUser />
           <Navbar />
           {children}
+          <Toaster />
         </ClerkProvider>
       </body>
     </html>
