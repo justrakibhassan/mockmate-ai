@@ -37,8 +37,8 @@ export function Navbar() {
   const pathname = usePathname();
 
   // Hide Navbar only on the active interview start page
-  const isStartPage = pathname?.split('/').filter(Boolean).pop() === 'start';
-  
+  const isStartPage = pathname?.split("/").filter(Boolean).pop() === "start";
+
   if (isStartPage) {
     return null;
   }
@@ -244,7 +244,10 @@ function PlanBadge() {
   if (!plan) return null;
 
   return (
-    <Badge variant="secondary" className="bg-primary/10 text-primary border-primary/20 font-bold px-3 py-1 scale-95 uppercase tracking-tighter">
+    <Badge
+      variant="secondary"
+      className="bg-primary/10 text-primary border-primary/20 font-bold px-3 py-1 scale-95 uppercase tracking-tighter"
+    >
       {plan} Plan
     </Badge>
   );
