@@ -12,7 +12,7 @@
 
   Mockmate AI is a cutting-edge platform designed to revolutionize how candidates prepare for job interviews. Leveraging the power of Google's Gemini AI, it provides a realistic, interactive, and personalized mock interview experience.
 
-  [Explore Platform](#) • [View Demo](#) • [Report Bug](https://github.com/rakibhassan01/mockmate-ai/issues)
+  [Explore Platform](https://mockmate-ai-self.vercel.app/) • [View Demo](https://mockmate-ai-self.vercel.app/) • [Report Bug](https://github.com/rakibhassan01/mockmate-ai/issues)
 </div>
 
 ---
@@ -110,5 +110,5 @@ Contributions are what make the open source community such an amazing place to l
 ---
 
 <div align="center">
-  Built with ❤️ by [Rakib Hassan](https://github.com/rakibhassan01)
+  Built with ❤️ by <a href="https://rakibhassan.vercel.app">Rakib Hassan</a>
 </div>
