@@ -139,7 +139,7 @@ export const HomeView = () => {
                     className="h-14 px-8 text-lg font-semibold transition-all hover:bg-primary/5 hover:scale-105 active:scale-95"
                     asChild
                   >
-                    <Link href="#how-it-works">See How it Works</Link>
+                    <Link href="/how-it-works">See How it Works</Link>
                   </Button>
                 </motion.div>
               </motion.div>
