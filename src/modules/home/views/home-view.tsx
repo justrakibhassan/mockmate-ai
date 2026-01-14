@@ -5,6 +5,7 @@ import { motion, useSpring, useTransform } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
 import { BrainCircuit, Star, ArrowRight, CheckCircle2 } from "lucide-react";
 
 const AnimatedNumber = ({ value }: { value: number }) => {
@@ -110,16 +111,28 @@ export const HomeView = () => {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.5, duration: 0.6 }}
                 >
-                  <Button
-                    size="lg"
-                    className="h-14 px-8 text-lg font-bold shadow-xl shadow-primary/20 transition-all hover:scale-105 active:scale-95"
-                    asChild
-                  >
-                    <Link href="/dashboard">
-                      Start Free Practice{" "}
-                      <ArrowRight className="ml-2 h-5 w-5" />
-                    </Link>
-                  </Button>
+                  <SignedOut>
+                    <SignInButton mode="modal">
+                      <Button
+                        size="lg"
+                        className="h-14 px-8 text-lg font-bold shadow-xl shadow-primary/20 transition-all hover:scale-105 active:scale-95"
+                      >
+                        Start Free Practice{" "}
+                        <ArrowRight className="ml-2 h-5 w-5" />
+                      </Button>
+                    </SignInButton>
+                  </SignedOut>
+                  <SignedIn>
+                    <Button
+                      size="lg"
+                      className="h-14 px-8 text-lg font-bold shadow-xl shadow-primary/20 transition-all hover:scale-105 active:scale-95"
+                      asChild
+                    >
+                      <Link href="/dashboard">
+                        Start Interview <ArrowRight className="ml-2 h-5 w-5" />
+                      </Link>
+                    </Button>
+                  </SignedIn>
                   <Button
                     size="lg"
                     variant="outline"
