@@ -5,7 +5,30 @@ const isProtectedRoute = createRouteMatcher([
   '/interview(.*)',
 ]);
 
+// Simple in-memory rate limit (Reset on edge cold starts)
+const rateLimitMap = new Map();
+
 export default clerkMiddleware(async (auth, req) => {
+  const ip = req.headers.get('x-forwarded-for') || 'anonymous';
+  const limit = 100; // 100 requests
+  const windowMs = 60 * 1000; // 1 minute
+
+  const now = Date.now();
+  const userRate = rateLimitMap.get(ip) || { count: 0, startTime: now };
+
+  if (now - userRate.startTime > windowMs) {
+    userRate.count = 1;
+    userRate.startTime = now;
+  } else {
+    userRate.count++;
+  }
+
+  rateLimitMap.set(ip, userRate);
+
+  if (userRate.count > limit) {
+    return new Response('Too Many Requests', { status: 429 });
+  }
+
   if (isProtectedRoute(req)) await auth.protect();
 });
 

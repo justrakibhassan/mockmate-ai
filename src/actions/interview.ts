@@ -36,8 +36,16 @@ export async function createInterview(data: {
 
     const { jobPosition, jobDesc, jobExperience } = data;
 
-    // AI Prompt
-    const prompt = `Job Position: ${jobPosition}, Job Description: ${jobDesc}, Years of Experience: ${jobExperience}. Based on this, provide 5 technical interview questions with answers in JSON format. The JSON should be an array of objects, each with "question" and "answer" fields. Do not include any other text.`;
+    const randomSalt = Math.random().toString(36).substring(7);
+    const prompt = `Job Position: ${jobPosition}, Job Description: ${jobDesc}, Years of Experience: ${jobExperience}.
+    Create 5 highly specific and randomized technical interview questions. 
+    Seed: ${randomSalt}
+    
+    Guidelines:
+    1. EXTREME VARIETY: Do not use common or generic questions like "Tell me about yourself", "What is React?", "Hooks vs Classes", "Props vs State", or "Virtual DOM".
+    2. SITUATIONAL FOCUS: Use "What if" scenarios or "Tell me about a time" related to the specific job description and experience level.
+    3. NO REPETITION: Every question must be radically different from the others.
+    4. Provide the result strictly in JSON format as an array of objects, each with "question" and "answer" fields. Do not include any other text.`;
 
     console.log("Gemini Prompt:", prompt);
 
@@ -179,11 +187,12 @@ export async function generateFeedback(interviewId: string) {
     const prompt = `Interview for ${
       interview.jobPosition
     }. Questions and User Answers: ${JSON.stringify(interview.answers)}. 
-    Evaluate each answer. For each answer, provide:
-    1. "rating": A score from 1-10.
-    2. "feedback": A brief explanation of why that score was given and how to improve.
-    3. "idealAnswer": A perfect version of the answer.
-    All data must be in JSON format as an array of objects. Do not include any other text.`;
+    Evaluate each answer professionally. For each answer, provide:
+    1. "rating": A score from 1-10 based on technical accuracy, clarity, and completeness.
+    2. "feedback": 2-3 sentences of constructive feedback. Identify what was good and specifically how to improve the response.
+    3. "idealAnswer": A concise, high-quality, professional response (approx 3-5 sentences) that demonstrates deep expertise and clear communication. Use the STAR method where applicable.
+    
+    All data must be in JSON format as an array of objects. Do not include any other text or markdown formatting except the JSON.`;
 
     const chatSession = model.startChat({
       generationConfig: generativeConfig,
@@ -198,16 +207,19 @@ export async function generateFeedback(interviewId: string) {
     const jsonFeedback = JSON.parse(mockJsonResp);
 
     // Update the interview with the feedback
-    interview.answers = interview.answers.map(
-      (ans: { question: string; answer: string }, idx: number) => ({
-        ...ans,
-        rating: jsonFeedback[idx]?.rating,
-        feedback: jsonFeedback[idx]?.feedback,
-        idealAnswer: jsonFeedback[idx]?.idealAnswer,
-      })
-    );
+    interview.answers = interview.answers.map((ans: { question: string, answer: string }, idx: number) => {
+      const feedbackItem = jsonFeedback[idx] || {};
+      return {
+        question: ans.question,
+        answer: ans.answer,
+        rating: feedbackItem.rating || 0,
+        feedback: feedbackItem.feedback || "No feedback provided",
+        idealAnswer: feedbackItem.idealAnswer || feedbackItem.ideal_answer || feedbackItem.best_answer || "No ideal answer generated",
+      };
+    });
 
     interview.status = "completed";
+    interview.markModified("answers");
     await interview.save();
 
     return {

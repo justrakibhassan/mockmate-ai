@@ -15,6 +15,7 @@ const UserSchema: Schema = new Schema(
     email: { type: String, required: true, unique: true },
     name: { type: String },
     imageUrl: { type: String },
+    plan: { type: String, default: "Free" },
   },
   { timestamps: true }
 );

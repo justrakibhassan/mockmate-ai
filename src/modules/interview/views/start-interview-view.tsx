@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Webcam from "react-webcam";
 import {
   BrainCircuit,
@@ -31,6 +31,21 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
   const router = useRouter();
 
   const questions = interview.questions;
+
+  // AI Text-to-Speech
+  const readQuestion = useCallback((text: string) => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 0.95;
+      utterance.pitch = 1;
+      window.speechSynthesis.speak(utterance);
+    }
+  }, []);
+
+  useEffect(() => {
+    readQuestion(questions[activeQuestionIndex]);
+  }, [activeQuestionIndex, questions, readQuestion]);
 
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
@@ -93,7 +108,10 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
             >
               <Card className="relative overflow-hidden border-none bg-background/50 shadow-xl ring-1 ring-primary/5">
                 <div className="absolute top-0 right-0 p-4">
-                  <Volume2 className="h-6 w-6 text-primary cursor-pointer hover:scale-110 transition-transform" />
+                  <Volume2
+                    onClick={() => readQuestion(questions[activeQuestionIndex])}
+                    className="h-6 w-6 text-primary cursor-pointer hover:scale-110 transition-transform"
+                  />
                 </div>
                 <CardHeader className="pt-8">
                   <CardTitle className="text-xl font-bold text-muted-foreground uppercase tracking-wider mb-2">

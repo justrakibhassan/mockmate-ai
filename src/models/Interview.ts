@@ -11,6 +11,7 @@ export interface IInterview extends Document {
     answer: string;
     feedback?: string;
     rating?: number;
+    idealAnswer?: string;
   }[];
   status: "pending" | "completed";
   createdAt: Date;
@@ -30,6 +31,7 @@ const InterviewSchema: Schema = new Schema(
         answer: { type: String },
         feedback: { type: String },
         rating: { type: Number },
+        idealAnswer: { type: String },
       },
     ],
     status: {
