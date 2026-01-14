@@ -1,10 +1,24 @@
 "use client";
+import React, { useEffect } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, useSpring, useTransform } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { BrainCircuit, Star, ArrowRight, CheckCircle2 } from "lucide-react";
+
+const AnimatedNumber = ({ value }: { value: number }) => {
+  const spring = useSpring(0, { mass: 0.8, stiffness: 75, damping: 15 });
+  const display = useTransform(spring, (current) =>
+    Math.round(current).toLocaleString()
+  );
+
+  useEffect(() => {
+    spring.set(value);
+  }, [spring, value]);
+
+  return <motion.span>{display}</motion.span>;
+};
 
 export const HomeView = () => {
   return (
@@ -117,27 +131,57 @@ export const HomeView = () => {
                 </motion.div>
               </motion.div>
 
-              {/* Stats/Social Proof */}
+              {/* Bottom Stats Section - Forced Gap */}
               <motion.div
-                initial={{ opacity: 0, y: 40 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.7, delay: 0.6 }}
-                className="mt-20 flex flex-wrap justify-center gap-8 border-t border-primary/5 pt-10 text-muted-foreground"
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.8, delay: 0.7, ease: "easeOut" }}
+                className="mt-20 inline-flex flex-wrap justify-center gap-4 rounded-3xl border border-primary/10 bg-primary/5 p-2 backdrop-blur-md sm:gap-8 sm:p-4"
               >
                 {[
-                  { label: "Interviews Ace", value: "10k+" },
-                  { label: "Success Rate", value: "98%" },
-                  { label: "Industries", value: "50+" },
-                ].map((stat) => (
+                  {
+                    label: "Interviews Ace",
+                    value: 10000,
+                    suffix: "+",
+                    icon: <CheckCircle2 className="h-4 w-4 text-primary" />,
+                    bg: "bg-primary/10",
+                  },
+                  {
+                    label: "Success Rate",
+                    value: 98,
+                    suffix: "%",
+                    icon: <Star className="h-4 w-4 text-secondary" />,
+                    bg: "bg-secondary/10",
+                  },
+                  {
+                    label: "Industries",
+                    value: 50,
+                    suffix: "+",
+                    icon: <BrainCircuit className="h-4 w-4 text-primary" />,
+                    bg: "bg-primary/10",
+                  },
+                ].map((stat, idx) => (
                   <motion.div
                     key={stat.label}
-                    className="flex items-center gap-2"
-                    whileHover={{ scale: 1.05, color: "var(--foreground)" }}
+                    initial={{ opacity: 0, x: -20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ delay: 0.8 + idx * 0.1, duration: 0.5 }}
+                    className="flex items-center gap-4 rounded-2xl bg-background/50 px-6 py-4 shadow-sm transition-all hover:bg-background hover:shadow-md border border-primary/5"
                   >
-                    <span className="text-2xl font-bold text-foreground">
-                      {stat.value}
-                    </span>
-                    <span className="text-sm">{stat.label}</span>
+                    <div
+                      className={`flex h-10 w-10 items-center justify-center rounded-xl ${stat.bg}`}
+                    >
+                      {stat.icon}
+                    </div>
+                    <div className="flex flex-col items-start -translate-y-px text-left">
+                      <div className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">
+                        <AnimatedNumber value={stat.value} />
+                        {stat.suffix}
+                      </div>
+                      <div className="text-xs font-medium uppercase tracking-widest text-muted-foreground/80">
+                        {stat.label}
+                      </div>
+                    </div>
                   </motion.div>
                 ))}
               </motion.div>

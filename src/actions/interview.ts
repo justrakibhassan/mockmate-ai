@@ -129,8 +129,6 @@ export async function saveUserAnswer(data: {
   interviewId: string;
   question: string;
   answer: string;
-  feedback?: string;
-  rating?: number;
 }) {
   try {
     const { userId } = await auth();
@@ -141,6 +139,41 @@ export async function saveUserAnswer(data: {
 
     await dbConnect();
 
+    // Get interview context for better evaluation
+    const interview = await Interview.findById(data.interviewId);
+    if (!interview) {
+      return { success: false, error: "Interview not found" };
+    }
+
+    // AI Prompt for Individual Answer Feedback
+    const prompt = `
+    Job Position: ${interview.jobPosition}
+    Job Description: ${interview.jobDesc}
+    Question: ${data.question}
+    User Answer: ${data.answer}
+    
+    Evaluate this specific answer professionally. Provide:
+    1. "rating": A score from 1-10 based on technical accuracy and completeness.
+    2. "feedback": 2-3 sentences of constructive feedback.
+    3. "idealAnswer": A high-quality, professional response that demonstrates how this question should have been answered perfectly.
+    
+    Response must be in JSON format: { "rating": number, "feedback": string, "idealAnswer": string }. Do not include any other text.
+    `;
+
+    const chatSession = model.startChat({
+      generationConfig: generativeConfig,
+      history: [],
+    });
+
+    const aiResult = await chatSession.sendMessage(prompt);
+    const mockJsonResp = aiResult.response
+      .text()
+      .replace("```json", "")
+      .replace("```", "")
+      .trim();
+    
+    const jsonFeedback = JSON.parse(mockJsonResp);
+
     const result = await Interview.findByIdAndUpdate(
       data.interviewId,
       {
@@ -148,8 +181,9 @@ export async function saveUserAnswer(data: {
           answers: {
             question: data.question,
             answer: data.answer,
-            feedback: data.feedback,
-            rating: data.rating,
+            feedback: jsonFeedback.feedback,
+            rating: jsonFeedback.rating,
+            idealAnswer: jsonFeedback.idealAnswer,
           },
         },
       },
@@ -183,7 +217,21 @@ export async function generateFeedback(interviewId: string) {
       return { success: false, error: "No answers found to evaluate" };
     }
 
-    // AI Prompt for Feedback
+    // Check if all answers already have evaluation
+    const allEvaluated = interview.answers.every((ans: { rating?: number; feedback?: string; idealAnswer?: string }) => 
+      ans.rating && ans.feedback && ans.idealAnswer
+    );
+    
+    if (allEvaluated) {
+      interview.status = "completed";
+      await interview.save();
+      return {
+        success: true,
+        feedback: JSON.parse(JSON.stringify(interview.answers)),
+      };
+    }
+
+    // AI Prompt for Feedback (Fallback for older interviews)
     const prompt = `Interview for ${
       interview.jobPosition
     }. Questions and User Answers: ${JSON.stringify(interview.answers)}. 
