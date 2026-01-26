@@ -27,13 +27,16 @@ export async function syncUser() {
       {
         upsert: true,
         new: true,
-      }
+      },
     );
 
     return { success: true, user: JSON.parse(JSON.stringify(updatedUser)) };
   } catch (error: unknown) {
     console.error("Error syncing user:", error);
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : "Unknown error",
+    };
   }
 }
 
@@ -48,5 +51,19 @@ export async function getUserPlan() {
   } catch (error) {
     console.error("Error fetching user plan:", error);
     return "Free";
+  }
+}
+
+export async function getUserCredits() {
+  try {
+    const user = await currentUser();
+    if (!user) return 0;
+
+    await dbConnect();
+    const dbUser = await User.findOne({ clerkId: user.id });
+    return dbUser?.credits || 0;
+  } catch (error) {
+    console.error("Error fetching user credits:", error);
+    return 0;
   }
 }

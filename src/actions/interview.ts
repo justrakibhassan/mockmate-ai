@@ -3,6 +3,7 @@
 import { auth } from "@clerk/nextjs/server";
 import dbConnect from "@/lib/dbConnect";
 import Interview from "@/models/Interview";
+import User from "@/models/User";
 import { model, generativeConfig } from "@/lib/gemini";
 import { revalidatePath } from "next/cache";
 
@@ -47,6 +48,18 @@ export async function createInterview(data: {
     3. NO REPETITION: Every question must be radically different from the others.
     4. Provide the result strictly in JSON format as an array of objects, each with "question" and "answer" fields. Do not include any other text.`;
 
+    await dbConnect();
+    
+    // Check credits before generating questions
+    const dbUser = await User.findOne({ clerkId: userId });
+    if (!dbUser) {
+      return { success: false, error: "User not found" };
+    }
+
+    if (dbUser.credits <= 0) {
+      return { success: false, error: "Insufficient credits. Please purchase more." };
+    }
+
     console.log("Gemini Prompt:", prompt);
 
     const chatSession = model.startChat({
@@ -76,8 +89,6 @@ export async function createInterview(data: {
 
     const questions = jsonResponse.map((q: { question: string }) => q.question);
 
-    await dbConnect();
-
     const newInterview = await Interview.create({
       clerkId: userId,
       jobPosition,
@@ -85,6 +96,12 @@ export async function createInterview(data: {
       jobExperience,
       questions,
     });
+
+    // Decrement credits
+    await User.findOneAndUpdate(
+      { clerkId: userId },
+      { $inc: { credits: -1 } }
+    );
 
     revalidatePath("/dashboard");
 

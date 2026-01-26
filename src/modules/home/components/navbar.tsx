@@ -24,6 +24,7 @@ import {
 
 import { usePathname } from "next/navigation";
 import { getUserPlan } from "@/actions/user";
+import { CreditDisplay } from "./credit-display";
 
 const navItems = [
   { name: "Home", href: "/" },
@@ -144,6 +145,7 @@ export function Navbar() {
               >
                 <Link href="/dashboard">Start Interview</Link>
               </Button>
+              <CreditDisplay />
               <PlanBadge />
               <UserButton afterSignOutUrl="/" />
             </SignedIn>
@@ -220,7 +222,8 @@ export function Navbar() {
                     >
                       <Link href="/dashboard">Start Interview</Link>
                     </Button>
-                    <div className="flex justify-center py-2">
+                    <div className="flex flex-col items-center gap-4 py-2">
+                      <CreditDisplay />
                       <UserButton afterSignOutUrl="/" />
                     </div>
                   </SignedIn>
