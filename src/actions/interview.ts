@@ -60,8 +60,6 @@ export async function createInterview(data: {
       return { success: false, error: "Insufficient credits. Please purchase more." };
     }
 
-    console.log("Gemini Prompt:", prompt);
-
     const chatSession = model.startChat({
       generationConfig: generativeConfig,
       history: [],
@@ -69,18 +67,23 @@ export async function createInterview(data: {
 
     const result = await chatSession.sendMessage(prompt);
     const rawText = result.response.text();
-    console.log("Gemini Raw Response:", rawText);
 
-    const mockJsonResp = rawText
-      .replace("```json", "")
-      .replace("```", "")
-      .trim();
+    let mockJsonResp = rawText;
+    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      mockJsonResp = jsonMatch[0];
+    } else {
+      mockJsonResp = rawText
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+    }
 
     let jsonResponse;
     try {
       jsonResponse = JSON.parse(mockJsonResp);
     } catch (parseError) {
-      console.error("JSON Parsing Error:", parseError);
+      console.error("JSON Parsing Error:", parseError, "Raw Response:", rawText);
       return {
         success: false,
         error: "Failed to parse AI response. Please try again.",
@@ -111,9 +114,10 @@ export async function createInterview(data: {
     };
   } catch (error: unknown) {
     console.error("Error creating interview:", error);
+    const errorMessage = error instanceof Error ? error.message : "Failed to create interview. Please try again.";
     return {
       success: false,
-      error: "Failed to create interview. Please try again.",
+      error: errorMessage,
     };
   }
 }
@@ -183,11 +187,16 @@ export async function saveUserAnswer(data: {
     });
 
     const aiResult = await chatSession.sendMessage(prompt);
-    const mockJsonResp = aiResult.response
-      .text()
-      .replace("```json", "")
-      .replace("```", "")
-      .trim();
+    let mockJsonResp = aiResult.response.text();
+    const jsonMatch = mockJsonResp.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      mockJsonResp = jsonMatch[0];
+    } else {
+      mockJsonResp = mockJsonResp
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+    }
     
     const jsonFeedback = JSON.parse(mockJsonResp);
 
@@ -265,10 +274,16 @@ export async function generateFeedback(interviewId: string) {
     });
 
     const result = await chatSession.sendMessage(prompt);
-    const mockJsonResp = result.response
-      .text()
-      .replace("```json", "")
-      .replace("```", "");
+    let mockJsonResp = result.response.text();
+    const jsonMatch = mockJsonResp.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      mockJsonResp = jsonMatch[0];
+    } else {
+      mockJsonResp = mockJsonResp
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
+        .trim();
+    }
     const jsonFeedback = JSON.parse(mockJsonResp);
 
     // Update the interview with the feedback
