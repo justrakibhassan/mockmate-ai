@@ -15,7 +15,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 interface InterviewRoomViewProps {
   interview: {
@@ -176,33 +176,28 @@ export const InterviewRoomView = ({ interview }: InterviewRoomViewProps) => {
             >
               {webcamEnabled ? (
                 <>
-                  {" "}
-                  <VideoOff className="mr-2 h-5 w-5" /> Disable Camera{" "}
+                  <VideoOff className="mr-2 h-5 w-5" /> Disable Camera
                 </>
               ) : (
                 <>
-                  {" "}
-                  <Video className="mr-2 h-5 w-5" /> Enable Camera{" "}
+                  <Video className="mr-2 h-5 w-5" /> Enable Camera
                 </>
               )}
             </Button>
 
-            <AnimatePresence>
-              {webcamEnabled && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                >
-                  <Link href={`/interview/${interview._id}/start`}>
-                    <Button className="h-16 w-full text-xl font-extrabold shadow-xl shadow-primary/20 bg-linear-to-r from-primary to-indigo-600 hover:scale-[1.02] active:scale-[0.98] transition-all">
-                      Start My Mock Interview{" "}
-                      <ArrowRight className="ml-2 h-6 w-6" />
-                    </Button>
-                  </Link>
-                </motion.div>
+            <div className="space-y-2">
+              <Link href={`/interview/${interview._id}/start`}>
+                <Button className="h-16 w-full text-xl font-extrabold shadow-xl shadow-primary/20 bg-linear-to-r from-primary to-indigo-600 hover:scale-[1.02] active:scale-[0.98] transition-all">
+                  Start My Mock Interview{" "}
+                  <ArrowRight className="ml-2 h-6 w-6" />
+                </Button>
+              </Link>
+              {!webcamEnabled && (
+                <p className="text-center text-xs font-semibold text-amber-600 dark:text-amber-500 animate-pulse">
+                  ⚠️ Camera is disabled. You will proceed in Voice-Only practice mode.
+                </p>
               )}
-            </AnimatePresence>
+            </div>
           </div>
         </motion.div>
       </div>

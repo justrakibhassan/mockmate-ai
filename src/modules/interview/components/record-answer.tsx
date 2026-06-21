@@ -44,6 +44,8 @@ export const RecordAnswer = ({
       if (resp.success) {
         resetTranscript();
         toast.success("Answer saved successfully!");
+      } else {
+        toast.error(resp.error || "Failed to save answer");
       }
     } catch (err) {
       console.error(err);

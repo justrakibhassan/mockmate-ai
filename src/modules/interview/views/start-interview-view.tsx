@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Lightbulb,
   Video,
+  VideoOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +29,7 @@ interface StartInterviewViewProps {
 
 export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
+  const [webcamError, setWebcamError] = useState(false);
   const router = useRouter();
 
   const questions = interview.questions;
@@ -172,21 +174,35 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
         {/* Right Column: Experience Panel (Webcam & Feedback) */}
         <div className="lg:col-span-5 space-y-6">
           <div className="relative aspect-video overflow-hidden rounded-3xl bg-slate-900 shadow-2xl ring-4 ring-background">
-            <Webcam
-              mirrored={true}
-              className="h-full w-full object-cover opacity-80"
-            />
+            {webcamError ? (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-4 text-slate-400 bg-slate-950">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-900">
+                  <VideoOff className="h-8 w-8 text-amber-500" />
+                </div>
+                <p className="text-sm font-medium">Camera Offline (Voice-Only Mode)</p>
+              </div>
+            ) : (
+              <Webcam
+                mirrored={true}
+                onUserMediaError={() => setWebcamError(true)}
+                className="h-full w-full object-cover opacity-80"
+              />
+            )}
             <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent flex items-end p-6">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary shadow-lg">
-                  <Video className="h-5 w-5 text-white" />
+                  {webcamError ? (
+                    <VideoOff className="h-5 w-5 text-white" />
+                  ) : (
+                    <Video className="h-5 w-5 text-white" />
+                  )}
                 </div>
                 <div>
                   <p className="text-xs font-bold text-white uppercase tracking-widest opacity-80">
                     Recording Status
                   </p>
                   <p className="text-sm font-bold text-white italic">
-                    AI analyzing your engagement...
+                    {webcamError ? "Voice-only input active..." : "AI analyzing your engagement..."}
                   </p>
                 </div>
               </div>

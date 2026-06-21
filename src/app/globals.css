@@ -69,6 +69,11 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(0.3 0.02 240);
   --sidebar-ring: oklch(0.585 0.233 277.117);
+  --border: oklch(0.92 0.01 240); /* Slate-200 equivalent */
+  --input: oklch(0.92 0.01 240);
+  --ring: oklch(0.585 0.233 277.117);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
 }
 
 .dark {

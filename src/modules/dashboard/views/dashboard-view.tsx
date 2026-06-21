@@ -6,7 +6,12 @@ import { InterviewList } from "../components/interview-list";
 import { motion } from "framer-motion";
 import { Zap } from "lucide-react";
 
-export const DashboardView = () => {
+interface DashboardViewProps {
+  plan?: string;
+  credits?: number;
+}
+
+export const DashboardView = ({ plan = "Free", credits = 0 }: DashboardViewProps) => {
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
       <motion.div
@@ -28,7 +33,7 @@ export const DashboardView = () => {
             >
               <Zap className="h-3 w-3 text-primary" />
               <span className="text-[10px] font-bold uppercase tracking-wider text-primary/80">
-                Free Plan <span className="mx-1 opacity-20">|</span> 3 Credits
+                {plan} Plan <span className="mx-1 opacity-20">|</span> {credits} Credits
                 Left
               </span>
             </motion.div>
