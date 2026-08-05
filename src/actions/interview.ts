@@ -9,8 +9,17 @@ import { revalidatePath } from "next/cache";
 
 export async function getInterviewDetails(interviewId: string) {
   try {
+    const { userId } = await auth();
+
+    if (!userId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
     await dbConnect();
-    const interview = await Interview.findById(interviewId);
+    const interview = await Interview.findOne({
+      _id: interviewId,
+      clerkId: userId,
+    });
 
     if (!interview) {
       return { success: false, error: "Interview not found" };
@@ -23,13 +32,24 @@ export async function getInterviewDetails(interviewId: string) {
   }
 }
 
+async function refundCredit(clerkId: string) {
+  try {
+    await User.findOneAndUpdate({ clerkId }, { $inc: { credits: 1 } });
+  } catch (error) {
+    console.error("Failed to refund credit:", error);
+  }
+}
+
 export async function createInterview(data: {
   jobPosition: string;
   jobDesc: string;
   jobExperience: string;
 }) {
+  let userId: string | null = null;
+  let creditReserved = false;
+
   try {
-    const { userId } = await auth();
+    ({ userId } = await auth());
 
     if (!userId) {
       return { success: false, error: "Unauthorized" };
@@ -49,16 +69,21 @@ export async function createInterview(data: {
     4. Provide the result strictly in JSON format as an array of objects, each with "question" and "answer" fields. Do not include any other text.`;
 
     await dbConnect();
-    
-    // Check credits before generating questions
-    const dbUser = await User.findOne({ clerkId: userId });
+
+    // Reserve a credit atomically so concurrent requests cannot double-spend
+    const dbUser = await User.findOneAndUpdate(
+      { clerkId: userId, credits: { $gt: 0 } },
+      { $inc: { credits: -1 } }
+    );
+
     if (!dbUser) {
-      return { success: false, error: "User not found" };
+      return {
+        success: false,
+        error: "Insufficient credits. Please purchase more.",
+      };
     }
 
-    if (dbUser.credits <= 0) {
-      return { success: false, error: "Insufficient credits. Please purchase more." };
-    }
+    creditReserved = true;
 
     const chatSession = model.startChat({
       generationConfig: generativeConfig,
@@ -84,6 +109,8 @@ export async function createInterview(data: {
       jsonResponse = JSON.parse(mockJsonResp);
     } catch (parseError) {
       console.error("JSON Parsing Error:", parseError, "Raw Response:", rawText);
+      await refundCredit(userId);
+      creditReserved = false;
       return {
         success: false,
         error: "Failed to parse AI response. Please try again.",
@@ -100,12 +127,6 @@ export async function createInterview(data: {
       questions,
     });
 
-    // Decrement credits
-    await User.findOneAndUpdate(
-      { clerkId: userId },
-      { $inc: { credits: -1 } }
-    );
-
     revalidatePath("/dashboard");
 
     return {
@@ -114,6 +135,9 @@ export async function createInterview(data: {
     };
   } catch (error: unknown) {
     console.error("Error creating interview:", error);
+    if (creditReserved && userId) {
+      await refundCredit(userId);
+    }
     const errorMessage = error instanceof Error ? error.message : "Failed to create interview. Please try again.";
     return {
       success: false,
@@ -161,9 +185,16 @@ export async function saveUserAnswer(data: {
     await dbConnect();
 
     // Get interview context for better evaluation
-    const interview = await Interview.findById(data.interviewId);
+    const interview = await Interview.findOne({
+      _id: data.interviewId,
+      clerkId: userId,
+    });
     if (!interview) {
       return { success: false, error: "Interview not found" };
+    }
+
+    if (!interview.questions.includes(data.question)) {
+      return { success: false, error: "Question does not belong to this interview" };
     }
 
     // AI Prompt for Individual Answer Feedback
@@ -200,21 +231,26 @@ export async function saveUserAnswer(data: {
     
     const jsonFeedback = JSON.parse(mockJsonResp);
 
-    const result = await Interview.findByIdAndUpdate(
-      data.interviewId,
-      {
-        $push: {
-          answers: {
-            question: data.question,
-            answer: data.answer,
-            feedback: jsonFeedback.feedback,
-            rating: jsonFeedback.rating,
-            idealAnswer: jsonFeedback.idealAnswer,
-          },
-        },
-      },
-      { new: true }
+    const entry = {
+      question: data.question,
+      answer: data.answer,
+      feedback: jsonFeedback.feedback,
+      rating: jsonFeedback.rating,
+      idealAnswer: jsonFeedback.idealAnswer,
+    };
+
+    const existingIndex = interview.answers.findIndex(
+      (ans: { question: string }) => ans.question === data.question
     );
+
+    if (existingIndex === -1) {
+      interview.answers.push(entry);
+    } else {
+      interview.answers[existingIndex] = entry;
+    }
+
+    interview.markModified("answers");
+    const result = await interview.save();
 
     return { success: true, result: JSON.parse(JSON.stringify(result)) };
   } catch (error: unknown) {

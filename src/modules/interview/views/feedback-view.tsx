@@ -16,6 +16,7 @@ import {
   ArrowRight,
   TrendingUp,
   Home,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -38,13 +39,14 @@ interface FeedbackViewProps {
 export const FeedbackView = ({ interviewId }: FeedbackViewProps) => {
   const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [overallRating, setOverallRating] = useState(0);
 
   useEffect(() => {
     const fetchFeedback = async () => {
       try {
         const result = await generateFeedback(interviewId);
-        if (result.success && result.feedback) {
+        if (result.success && result.feedback?.length) {
           setFeedback(result.feedback);
 
           // Calculate average rating
@@ -54,9 +56,12 @@ export const FeedbackView = ({ interviewId }: FeedbackViewProps) => {
             0
           );
           setOverallRating(Math.round(total / result.feedback.length));
+        } else {
+          setError(result.error || "No feedback is available for this interview.");
         }
-      } catch (error) {
-        console.error(error);
+      } catch (err) {
+        console.error(err);
+        setError("Something went wrong while generating your feedback.");
       } finally {
         setLoading(false);
       }
@@ -77,6 +82,33 @@ export const FeedbackView = ({ interviewId }: FeedbackViewProps) => {
           <p className="text-muted-foreground italic">
             Gemini is analyzing your answers and performance.
           </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="container mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center px-4 text-center">
+        <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500">
+          <AlertCircle className="h-8 w-8" />
+        </div>
+        <h1 className="text-3xl font-bold text-foreground">No Feedback Yet</h1>
+        <p className="mt-3 text-muted-foreground">{error}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Answer at least one question during the session to get an AI review.
+        </p>
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+          <Button variant="outline" className="h-12 px-6 font-bold" asChild>
+            <Link href="/dashboard">
+              <Home className="mr-2 h-5 w-5" /> Back to Dashboard
+            </Link>
+          </Button>
+          <Button className="h-12 px-6 font-bold" asChild>
+            <Link href={`/interview/${interviewId}/start`}>
+              Resume Interview <ArrowRight className="ml-2 h-5 w-5" />
+            </Link>
+          </Button>
         </div>
       </div>
     );

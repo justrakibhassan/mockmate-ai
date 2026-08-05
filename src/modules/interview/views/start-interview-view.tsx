@@ -5,6 +5,7 @@ import Webcam from "react-webcam";
 import {
   BrainCircuit,
   Volume2,
+  VolumeX,
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
@@ -24,12 +25,17 @@ interface StartInterviewViewProps {
     _id: string;
     questions: string[];
     jobPosition: string;
+    answers?: { question: string }[];
   };
 }
 
 export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [webcamError, setWebcamError] = useState(false);
+  const [answered, setAnswered] = useState<Set<string>>(
+    () => new Set((interview.answers ?? []).map((a) => a.question))
+  );
+  const [speaking, setSpeaking] = useState(false);
   const router = useRouter();
 
   const questions = interview.questions;
@@ -41,13 +47,49 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 0.95;
       utterance.pitch = 1;
+      utterance.onstart = () => setSpeaking(true);
+      utterance.onend = () => setSpeaking(false);
+      utterance.onerror = () => setSpeaking(false);
       window.speechSynthesis.speak(utterance);
+    }
+  }, []);
+
+  const stopSpeaking = useCallback(() => {
+    if ("speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setSpeaking(false);
     }
   }, []);
 
   useEffect(() => {
     readQuestion(questions[activeQuestionIndex]);
   }, [activeQuestionIndex, questions, readQuestion]);
+
+  // Otherwise the question keeps being read aloud after leaving the page.
+  useEffect(() => {
+    return () => {
+      if ("speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
+
+  const unansweredCount = questions.length - answered.size;
+
+  const onEndInterview = () => {
+    if (
+      unansweredCount > 0 &&
+      !window.confirm(
+        `You have ${unansweredCount} unanswered question${
+          unansweredCount === 1 ? "" : "s"
+        }. End the interview anyway?`
+      )
+    ) {
+      return;
+    }
+    stopSpeaking();
+    router.push(`/interview/${interview._id}/feedback`);
+  };
 
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
@@ -81,22 +123,39 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
         {/* Left Column: Question & Controls (Content Focused) */}
         <div className="lg:col-span-7 space-y-8">
           {/* Question Navigator */}
-          <div className="flex flex-wrap gap-2">
-            {questions.map((_, index) => (
-              <Button
-                key={index}
-                variant={activeQuestionIndex === index ? "default" : "outline"}
-                size="sm"
-                className={`w-10 h-10 rounded-xl font-bold transition-all ${
-                  activeQuestionIndex === index
-                    ? "scale-110 shadow-md shadow-primary/20"
-                    : ""
-                }`}
-                onClick={() => setActiveQuestionIndex(index)}
-              >
-                {index + 1}
-              </Button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            {questions.map((question, index) => {
+              const isAnswered = answered.has(question);
+              return (
+                <Button
+                  key={index}
+                  variant={activeQuestionIndex === index ? "default" : "outline"}
+                  size="sm"
+                  aria-label={`Question ${index + 1}${
+                    isAnswered ? " (answered)" : " (not answered)"
+                  }`}
+                  aria-current={activeQuestionIndex === index ? "step" : undefined}
+                  className={`relative w-10 h-10 rounded-xl font-bold transition-all ${
+                    activeQuestionIndex === index
+                      ? "scale-110 shadow-md shadow-primary/20"
+                      : ""
+                  } ${
+                    isAnswered && activeQuestionIndex !== index
+                      ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-500"
+                      : ""
+                  }`}
+                  onClick={() => setActiveQuestionIndex(index)}
+                >
+                  {index + 1}
+                  {isAnswered && (
+                    <CheckCircle2 className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-background text-emerald-500" />
+                  )}
+                </Button>
+              );
+            })}
+            <span className="ml-2 text-sm text-muted-foreground">
+              {answered.size}/{questions.length} answered
+            </span>
           </div>
 
           {/* Active Question Card */}
@@ -110,10 +169,25 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
             >
               <Card className="relative overflow-hidden border-none bg-background/50 shadow-xl ring-1 ring-primary/5">
                 <div className="absolute top-0 right-0 p-4">
-                  <Volume2
-                    onClick={() => readQuestion(questions[activeQuestionIndex])}
-                    className="h-6 w-6 text-primary cursor-pointer hover:scale-110 transition-transform"
-                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full hover:bg-primary/10"
+                    onClick={() =>
+                      speaking
+                        ? stopSpeaking()
+                        : readQuestion(questions[activeQuestionIndex])
+                    }
+                    aria-label={
+                      speaking ? "Stop reading question" : "Read question aloud"
+                    }
+                  >
+                    {speaking ? (
+                      <VolumeX className="h-6 w-6 text-primary" />
+                    ) : (
+                      <Volume2 className="h-6 w-6 text-primary" />
+                    )}
+                  </Button>
                 </div>
                 <CardHeader className="pt-8">
                   <CardTitle className="text-xl font-bold text-muted-foreground uppercase tracking-wider mb-2">
@@ -153,9 +227,7 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
                 size="lg"
                 variant="default"
                 className="h-14 px-8 font-extrabold bg-linear-to-r from-emerald-600 to-teal-500 shadow-xl shadow-emerald-500/20"
-                onClick={() =>
-                  router.push(`/interview/${interview._id}/feedback`)
-                }
+                onClick={onEndInterview}
               >
                 End Interview <CheckCircle2 className="ml-2 h-5 w-5" />
               </Button>
@@ -214,6 +286,9 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
               <RecordAnswer
                 interviewId={interview._id}
                 activeQuestion={questions[activeQuestionIndex]}
+                onSaved={(question) =>
+                  setAnswered((prev) => new Set(prev).add(question))
+                }
               />
             </CardContent>
           </Card>

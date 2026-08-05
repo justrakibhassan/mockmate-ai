@@ -1,14 +1,25 @@
 import mongoose from "mongoose";
 import dns from "dns";
 
-// Fix querySrv ECONNREFUSED error on local networks/ISPs by setting fallback public DNS servers
-if (dns && typeof dns.setServers === "function") {
-  try {
-    dns.setServers(["8.8.8.8", "1.1.1.1"]);
-  } catch (err) {
-    console.warn("Failed to set public DNS fallback servers:", err);
+function configureDNS() {
+  if (dns && typeof dns.setServers === "function") {
+    try {
+      dns.setServers(["8.8.8.8", "1.1.1.1"]);
+    } catch (err) {
+      console.warn("Failed to set public DNS fallback servers:", err);
+    }
+  }
+  if (dns && typeof dns.setDefaultResultOrder === "function") {
+    try {
+      dns.setDefaultResultOrder("ipv4first");
+    } catch {
+      // ignore
+    }
   }
 }
+
+// Initial DNS configuration on module load
+configureDNS();
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -31,6 +42,9 @@ async function dbConnect() {
   if (cached.conn) {
     return cached.conn;
   }
+
+  // Reinforce DNS fallback before attempting connection
+  configureDNS();
 
   if (!cached.promise) {
     const opts = {

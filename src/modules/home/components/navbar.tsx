@@ -25,6 +25,7 @@ import {
 import { usePathname } from "next/navigation";
 import { getUserPlan } from "@/actions/user";
 import { CreditDisplay } from "./credit-display";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const navItems = [
   { name: "Home", href: "/" },
@@ -111,6 +112,7 @@ export function Navbar() {
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.5 }}
           >
+            <ThemeToggle />
             <SignedOut>
               <SignInButton mode="modal">
                 <Button
@@ -227,6 +229,12 @@ export function Navbar() {
                       <UserButton afterSignOutUrl="/" />
                     </div>
                   </SignedIn>
+                  <div className="flex items-center justify-between rounded-xl border border-primary/5 px-4 py-2">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Theme
+                    </span>
+                    <ThemeToggle />
+                  </div>
                 </div>
               </div>
             </SheetContent>

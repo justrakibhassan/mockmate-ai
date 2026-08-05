@@ -22,6 +22,7 @@ export const metadata: Metadata = {
 import { Navbar } from "@/modules/home/components/navbar";
 import { SyncUser } from "@/components/sync-user";
 import { Toaster } from "@/components/ui/sonner";
+import { ThemeProvider } from "@/components/theme-provider";
 
 export default function RootLayout({
   children,
@@ -34,12 +35,19 @@ export default function RootLayout({
         suppressHydrationWarning
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ClerkProvider>
-          <SyncUser />
-          <Navbar />
-          {children}
-          <Toaster />
-        </ClerkProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <ClerkProvider>
+            <SyncUser />
+            <Navbar />
+            {children}
+            <Toaster />
+          </ClerkProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

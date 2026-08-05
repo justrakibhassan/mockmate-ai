@@ -1,7 +1,7 @@
 "use client";
 
 import "regenerator-runtime/runtime";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import SpeechRecognition, {
   useSpeechRecognition,
 } from "react-speech-recognition";
@@ -13,11 +13,13 @@ import { saveUserAnswer } from "@/actions/interview";
 interface RecordAnswerProps {
   interviewId: string;
   activeQuestion: string;
+  onSaved?: (question: string) => void;
 }
 
 export const RecordAnswer = ({
   interviewId,
   activeQuestion,
+  onSaved,
 }: RecordAnswerProps) => {
   const [saving, setSaving] = useState(false);
   const {
@@ -26,6 +28,19 @@ export const RecordAnswer = ({
     resetTranscript,
     browserSupportsSpeechRecognition,
   } = useSpeechRecognition();
+
+  // Without this, an unsaved transcript from the previous question stays in
+  // the box and would be submitted against the new one.
+  useEffect(() => {
+    SpeechRecognition.stopListening();
+    resetTranscript();
+  }, [activeQuestion, resetTranscript]);
+
+  useEffect(() => {
+    return () => {
+      SpeechRecognition.stopListening();
+    };
+  }, []);
 
   const onSaveAnswer = async () => {
     if (transcript.length < 10) {
@@ -43,6 +58,7 @@ export const RecordAnswer = ({
 
       if (resp.success) {
         resetTranscript();
+        onSaved?.(activeQuestion);
         toast.success("Answer saved successfully!");
       } else {
         toast.error(resp.error || "Failed to save answer");
@@ -78,6 +94,7 @@ export const RecordAnswer = ({
               ? SpeechRecognition.stopListening
               : () => SpeechRecognition.startListening({ continuous: true })
           }
+          aria-label={listening ? "Stop recording" : "Start recording"}
         >
           {listening ? (
             <Square className="h-8 w-8" />
@@ -88,7 +105,10 @@ export const RecordAnswer = ({
       </div>
 
       <div className="w-full space-y-4">
-        <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border text-sm min-h-[100px] max-h-[200px] overflow-auto italic text-muted-foreground">
+        <div
+          aria-live="polite"
+          className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border text-sm min-h-[100px] max-h-[200px] overflow-auto italic text-muted-foreground"
+        >
           {transcript || "Click the microphone and start speaking your answer..."}
         </div>
 
@@ -104,6 +124,12 @@ export const RecordAnswer = ({
           )}
           {saving ? "Saving..." : "Save Answer"}
         </Button>
+
+        {listening && (
+          <p className="text-center text-xs text-muted-foreground">
+            Stop recording to save your answer.
+          </p>
+        )}
       </div>
     </div>
   );

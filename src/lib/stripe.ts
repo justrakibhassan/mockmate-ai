@@ -1,5 +1,9 @@
 import Stripe from "stripe";
 
-export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_dummy", {
-  apiVersion: "2025-01-27.acacia" as Stripe.StripeConfig["apiVersion"], // Using a recent version
-});
+const secretKey = process.env.STRIPE_SECRET_KEY;
+
+if (!secretKey) {
+  throw new Error("STRIPE_SECRET_KEY is not defined in environment variables");
+}
+
+export const stripe = new Stripe(secretKey);
