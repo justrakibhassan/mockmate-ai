@@ -8,6 +8,8 @@ interface StartInterviewPageProps {
   }>;
 }
 
+export const dynamic = "force-dynamic";
+
 export default async function StartInterviewPage({ params }: StartInterviewPageProps) {
   const { interviewId } = await params;
   
