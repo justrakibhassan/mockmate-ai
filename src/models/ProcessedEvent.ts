@@ -7,7 +7,7 @@ export interface IProcessedEvent extends Document {
 
 const ProcessedEventSchema: Schema = new Schema({
   eventId: { type: String, required: true, unique: true },
-  createdAt: { type: Date, default: Date.now },
+  createdAt: { type: Date, default: Date.now, expires: 7776000 }, // 90 days TTL
 });
 
 const ProcessedEvent =

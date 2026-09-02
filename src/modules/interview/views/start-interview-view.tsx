@@ -12,13 +12,16 @@ import {
   Lightbulb,
   Video,
   VideoOff,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { RecordAnswer } from "../components/record-answer";
+import { completeAndEvaluateInterview } from "@/actions/interview";
 
 interface StartInterviewViewProps {
   interview: {
@@ -36,6 +39,7 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
     () => new Set((interview.answers ?? []).map((a) => a.question))
   );
   const [speaking, setSpeaking] = useState(false);
+  const [completing, setCompleting] = useState(false);
   const router = useRouter();
 
   const questions = interview.questions;
@@ -76,7 +80,7 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
 
   const unansweredCount = questions.length - answered.size;
 
-  const onEndInterview = () => {
+  const onEndInterview = async () => {
     if (
       unansweredCount > 0 &&
       !window.confirm(
@@ -88,7 +92,27 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
       return;
     }
     stopSpeaking();
-    router.push(`/interview/${interview._id}/feedback`);
+
+    if (answered.size === 0) {
+      toast.warning("Please save an answer for at least one question before ending the interview.");
+      return;
+    }
+
+    setCompleting(true);
+    try {
+      const resp = await completeAndEvaluateInterview(interview._id);
+      if (resp.success) {
+        toast.success("Interview completed! Loading your evaluation...");
+        router.push(`/interview/${interview._id}/feedback`);
+      } else {
+        toast.error(resp.error || "Failed to evaluate interview.");
+        setCompleting(false);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to complete interview.");
+      setCompleting(false);
+    }
   };
 
   return (
@@ -226,10 +250,20 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
               <Button
                 size="lg"
                 variant="default"
+                disabled={completing}
                 className="h-14 px-8 font-extrabold bg-linear-to-r from-emerald-600 to-teal-500 shadow-xl shadow-emerald-500/20"
                 onClick={onEndInterview}
               >
-                End Interview <CheckCircle2 className="ml-2 h-5 w-5" />
+                {completing ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Evaluating Responses...
+                  </>
+                ) : (
+                  <>
+                    End Interview <CheckCircle2 className="ml-2 h-5 w-5" />
+                  </>
+                )}
               </Button>
             ) : (
               <Button
@@ -271,10 +305,10 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
                 </div>
                 <div>
                   <p className="text-xs font-bold text-white uppercase tracking-widest opacity-80">
-                    Recording Status
+                    Camera Status
                   </p>
                   <p className="text-sm font-bold text-white italic">
-                    {webcamError ? "Voice-only input active..." : "AI analyzing your engagement..."}
+                    {webcamError ? "Voice-only practice active..." : "Live camera self-view active for practice presence"}
                   </p>
                 </div>
               </div>

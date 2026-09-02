@@ -9,9 +9,14 @@ import { Zap } from "lucide-react";
 interface DashboardViewProps {
   plan?: string;
   credits?: number;
+  initialInterviews?: any[];
 }
 
-export const DashboardView = ({ plan = "Free", credits = 0 }: DashboardViewProps) => {
+export const DashboardView = ({
+  plan = "Free",
+  credits = 0,
+  initialInterviews = [],
+}: DashboardViewProps) => {
   return (
     <div className="container mx-auto px-4 py-8 md:py-12">
       <motion.div
@@ -50,7 +55,7 @@ export const DashboardView = ({ plan = "Free", credits = 0 }: DashboardViewProps
         <h2 className="mb-6 text-xl font-semibold text-foreground flex items-center gap-2">
           Recent Interview Sessions
         </h2>
-        <InterviewList />
+        <InterviewList initialInterviews={initialInterviews} />
       </motion.div>
     </div>
   );

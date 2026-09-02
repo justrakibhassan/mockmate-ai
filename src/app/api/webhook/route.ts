@@ -37,28 +37,46 @@ export async function POST(req: Request) {
 
     await dbConnect();
 
-    // Stripe retries deliveries; the unique index makes this insert the
-    // idempotency guard so a replayed event cannot grant credits twice.
+    /**
+     * IDEMPOTENCY PATTERN (At-Least-Once Delivery Defense):
+     * Stripe delivers webhooks with at-least-once semantics; network blips or timeouts
+     * can trigger duplicate event deliveries. We insert the event ID into ProcessedEvent
+     * which holds a unique index. If code 11000 (duplicate key) is caught, we know this
+     * event has already been acknowledged or is in flight, preventing double-crediting.
+     */
     try {
       await ProcessedEvent.create({ eventId: event.id });
     } catch (error) {
       if ((error as { code?: number })?.code === 11000) {
+        // Idempotent duplicate: ack 200 immediately so Stripe stops retrying.
         return new NextResponse(null, { status: 200 });
       }
-      // A real failure (e.g. DB down) — let Stripe retry.
-      console.error("[STRIPE_WEBHOOK] Failed to record event", error);
+      // Infrastructure failure (e.g. DB connection dropped): return 500 for Stripe retry.
+      console.error("[STRIPE_WEBHOOK] Failed to record event marker", error);
       return new NextResponse("Failed to record event", { status: 500 });
     }
 
+    const plan = session?.metadata?.plan;
+    const updateOps: { $inc: { credits: number }; plan?: string } = {
+      $inc: { credits: credits },
+    };
+    if (plan && plan !== "Free") {
+      updateOps.plan = plan;
+    }
+
+    /**
+     * COMPENSATING ROLLBACK:
+     * If user credit update fails, remove the ProcessedEvent lock marker so Stripe's
+     * subsequent retry attempts can re-acquire the lock and grant the user's purchase.
+     */
     try {
       await User.findOneAndUpdate(
         { clerkId: userId },
-        { $inc: { credits: credits } }
+        updateOps
       );
     } catch (error) {
-      // Let Stripe retry, but drop the marker first so the retry can proceed.
       await ProcessedEvent.deleteOne({ eventId: event.id });
-      console.error("[STRIPE_WEBHOOK] Failed to grant credits", error);
+      console.error("[STRIPE_WEBHOOK] Failed to grant credits, rolled back marker", error);
       return new NextResponse("Failed to grant credits", { status: 500 });
     }
   }

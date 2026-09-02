@@ -24,6 +24,9 @@ import { Card, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import Link from "next/link";
 
+import { completeAndEvaluateInterview } from "@/actions/interview";
+import { Loader2 } from "lucide-react";
+
 interface FeedbackItem {
   question: string;
   answer: string;
@@ -34,43 +37,52 @@ interface FeedbackItem {
 
 interface FeedbackViewProps {
   interviewId: string;
+  initialFeedback?: FeedbackItem[];
+  initialOverallRating?: number;
+  initialError?: string | null;
+  isCompleted?: boolean;
 }
 
-export const FeedbackView = ({ interviewId }: FeedbackViewProps) => {
-  const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [overallRating, setOverallRating] = useState(0);
+export const FeedbackView = ({
+  interviewId,
+  initialFeedback = [],
+  initialOverallRating = 0,
+  initialError = null,
+  isCompleted = false,
+}: FeedbackViewProps) => {
+  const [feedback, setFeedback] = useState<FeedbackItem[]>(initialFeedback);
+  const [evaluating, setEvaluating] = useState(false);
+  const [error, setError] = useState<string | null>(initialError);
+  const [overallRating, setOverallRating] = useState(initialOverallRating);
 
-  useEffect(() => {
-    const fetchFeedback = async () => {
-      try {
-        const result = await generateFeedback(interviewId);
-        if (result.success && result.feedback?.length) {
-          setFeedback(result.feedback);
-
-          // Calculate average rating
-          const total = result.feedback.reduce(
-            (acc: number, item: { rating?: number }) =>
-              acc + (item.rating || 0),
-            0
-          );
-          setOverallRating(Math.round(total / result.feedback.length));
-        } else {
-          setError(result.error || "No feedback is available for this interview.");
-        }
-      } catch (err) {
-        console.error(err);
-        setError("Something went wrong while generating your feedback.");
-      } finally {
-        setLoading(false);
+  const handleManualEvaluate = async () => {
+    setEvaluating(true);
+    setError(null);
+    try {
+      const result = await completeAndEvaluateInterview(interviewId);
+      if (result.success && result.feedback?.length) {
+        setFeedback(result.feedback);
+        const total = result.feedback.reduce(
+          (acc: number, item: { rating?: number }) => acc + (item.rating || 0),
+          0
+        );
+        setOverallRating(
+          typeof result.overallRating === "number"
+            ? result.overallRating
+          : Math.round(total / result.feedback.length)
+        );
+      } else {
+        setError(result.error || "No feedback is available for this interview.");
       }
-    };
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong while evaluating your responses.");
+    } finally {
+      setEvaluating(false);
+    }
+  };
 
-    fetchFeedback();
-  }, [interviewId]);
-
-  if (loading) {
+  if (evaluating) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6">
         <div className="relative">
@@ -87,16 +99,18 @@ export const FeedbackView = ({ interviewId }: FeedbackViewProps) => {
     );
   }
 
-  if (error) {
+  if (error || feedback.length === 0) {
     return (
       <div className="container mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center px-4 text-center">
         <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500">
           <AlertCircle className="h-8 w-8" />
         </div>
-        <h1 className="text-3xl font-bold text-foreground">No Feedback Yet</h1>
-        <p className="mt-3 text-muted-foreground">{error}</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Answer at least one question during the session to get an AI review.
+        <h1 className="text-3xl font-bold text-foreground">
+          {error ? "Notice" : "Evaluation Pending"}
+        </h1>
+        <p className="mt-3 text-muted-foreground">
+          {error ||
+            "This interview has not been evaluated yet. Complete the interview to generate your AI feedback."}
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <Button variant="outline" className="h-12 px-6 font-bold" asChild>
@@ -104,11 +118,28 @@ export const FeedbackView = ({ interviewId }: FeedbackViewProps) => {
               <Home className="mr-2 h-5 w-5" /> Back to Dashboard
             </Link>
           </Button>
-          <Button className="h-12 px-6 font-bold" asChild>
-            <Link href={`/interview/${interviewId}/start`}>
-              Resume Interview <ArrowRight className="ml-2 h-5 w-5" />
-            </Link>
-          </Button>
+          {!isCompleted ? (
+            <Button className="h-12 px-6 font-bold" asChild>
+              <Link href={`/interview/${interviewId}/start`}>
+                Resume Interview <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              className="h-12 px-6 font-bold"
+              onClick={handleManualEvaluate}
+              disabled={evaluating}
+            >
+              {evaluating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Evaluating...
+                </>
+              ) : (
+                "Evaluate Saved Answers"
+              )}
+            </Button>
+          )}
         </div>
       </div>
     );
