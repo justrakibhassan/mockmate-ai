@@ -2,7 +2,8 @@ import mongoose from "mongoose";
 import dns from "dns";
 
 function configureDNS() {
-  if (dns && typeof dns.setServers === "function") {
+  // Public DNS fallback is for local Windows development resolution; prod cloud environments should use VPC DNS
+  if (process.env.NODE_ENV !== "production" && dns && typeof dns.setServers === "function") {
     try {
       dns.setServers(["8.8.8.8", "1.1.1.1"]);
     } catch (err) {

@@ -9,7 +9,7 @@ if (!apiKey) {
 const genAI = new GoogleGenerativeAI(apiKey);
 
 export const model = genAI.getGenerativeModel({
-  model: "gemini-3-flash-preview",
+  model: process.env.GEMINI_MODEL || "gemini-2.0-flash",
 });
 
 export const generativeConfig = {

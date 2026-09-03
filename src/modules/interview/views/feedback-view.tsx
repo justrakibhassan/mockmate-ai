@@ -1,37 +1,40 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { generateFeedback } from "@/actions/interview";
+import React, { useState } from "react";
+import {
+  Trophy,
+  CheckCircle2,
+  TrendingUp,
+  MessageSquare,
+  Star,
+  Home,
+  ArrowRight,
+  AlertCircle,
+  Printer,
+  Sparkles,
+  Loader2,
+} from "lucide-react";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import {
-  CheckCircle2,
-  Trophy,
-  Star,
-  MessageSquare,
-  ArrowRight,
-  TrendingUp,
-  Home,
-  AlertCircle,
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import Link from "next/link";
-
 import { completeAndEvaluateInterview } from "@/actions/interview";
-import { Loader2 } from "lucide-react";
 
 interface FeedbackItem {
   question: string;
   answer: string;
   feedback: string;
   rating: number;
+  technicalAccuracy?: number;
+  communication?: number;
+  architectureTradeoffs?: number;
   idealAnswer: string;
 }
 
@@ -41,6 +44,7 @@ interface FeedbackViewProps {
   initialOverallRating?: number;
   initialError?: string | null;
   isCompleted?: boolean;
+  isDemo?: boolean;
 }
 
 export const FeedbackView = ({
@@ -49,6 +53,7 @@ export const FeedbackView = ({
   initialOverallRating = 0,
   initialError = null,
   isCompleted = false,
+  isDemo = false,
 }: FeedbackViewProps) => {
   const [feedback, setFeedback] = useState<FeedbackItem[]>(initialFeedback);
   const [evaluating, setEvaluating] = useState(false);
@@ -152,6 +157,30 @@ export const FeedbackView = ({
         animate={{ opacity: 1, y: 0 }}
         className="space-y-10"
       >
+        {isDemo && (
+          <div className="p-5 rounded-3xl bg-primary/10 border border-primary/20 flex flex-col sm:flex-row items-center justify-between gap-4 no-print shadow-lg shadow-primary/5">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-md">
+                <Sparkles className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="font-bold text-foreground text-base">Recruiter Showcase Demo</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  Interactive evaluation report for a Senior Full-Stack Engineer session. No login or mic required to test!
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" asChild className="rounded-xl font-bold">
+                <Link href="/">Back to Home</Link>
+              </Button>
+              <Button size="sm" asChild className="rounded-xl font-bold shadow-md shadow-primary/20">
+                <Link href="/sign-up">Sign Up Free</Link>
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Congratulations Header */}
         <div className="text-center space-y-4">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500 shadow-lg shadow-emerald-500/20">
@@ -164,6 +193,16 @@ export const FeedbackView = ({
             You have successfully completed your mock interview. Here is your
             AI-driven performance review.
           </p>
+          <div className="pt-2 no-print">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              className="h-10 px-5 font-bold rounded-xl border-primary/20 hover:bg-primary/5 shadow-xs"
+            >
+              <Printer className="mr-2 h-4 w-4 text-primary" /> Export Evaluation (PDF)
+            </Button>
+          </div>
         </div>
 
         {/* Score Overview */}
@@ -248,24 +287,46 @@ export const FeedbackView = ({
                     </div>
                   </div>
 
-                  <div className="p-5 rounded-2xl bg-amber-500/5 ring-1 ring-amber-500/20">
+                  <div className="p-5 rounded-2xl bg-amber-500/5 ring-1 ring-amber-500/20 space-y-3">
                     <div className="flex gap-4">
                       <Star className="h-6 w-6 text-amber-500 shrink-0" />
-                      <div>
+                      <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-bold text-amber-600 uppercase text-xs tracking-widest">
-                            Feedback & Rating
+                            Feedback & Evaluation
                           </span>
                           <Badge
                             variant="outline"
-                            className="text-xs bg-amber-100 dark:bg-amber-900/40 border-amber-200 text-amber-700"
+                            className="text-xs font-bold bg-amber-100 dark:bg-amber-900/40 border-amber-200 text-amber-700 dark:text-amber-300"
                           >
-                            Score: {item.rating}/10
+                            Composite Score: {item.rating}/10
                           </Badge>
                         </div>
                         <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap pt-1">
                           {item.feedback}
                         </p>
+                      </div>
+                    </div>
+
+                    {/* Multi-Dimensional Rubric Breakdown */}
+                    <div className="pt-3 border-t border-amber-500/10 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div className="flex items-center justify-between rounded-xl bg-background/80 px-3 py-2 text-xs ring-1 ring-slate-200/60 dark:ring-slate-800">
+                        <span className="text-muted-foreground font-medium">Technical Accuracy</span>
+                        <span className="font-bold text-primary">
+                          {item.technicalAccuracy ?? item.rating}/10
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-xl bg-background/80 px-3 py-2 text-xs ring-1 ring-slate-200/60 dark:ring-slate-800">
+                        <span className="text-muted-foreground font-medium">Communication (STAR)</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                          {item.communication ?? item.rating}/10
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-xl bg-background/80 px-3 py-2 text-xs ring-1 ring-slate-200/60 dark:ring-slate-800">
+                        <span className="text-muted-foreground font-medium">Architecture & Trade-offs</span>
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                          {item.architectureTradeoffs ?? item.rating}/10
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -276,7 +337,7 @@ export const FeedbackView = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-10">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-10 no-print action-buttons">
           <Button
             size="lg"
             variant="outline"

@@ -18,7 +18,10 @@ export default async function DashboardPage() {
 
   const [dbUser, interviews] = await Promise.all([
     User.findOne({ clerkId: userId }).lean(),
-    Interview.find({ clerkId: userId }).sort({ createdAt: -1 }).lean(),
+    Interview.find({ clerkId: userId })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean(),
   ]);
 
   const plan = dbUser?.plan || "Free";

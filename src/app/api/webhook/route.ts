@@ -65,18 +65,68 @@ export async function POST(req: Request) {
     }
 
     /**
-     * COMPENSATING ROLLBACK:
-     * If user credit update fails, remove the ProcessedEvent lock marker so Stripe's
-     * subsequent retry attempts can re-acquire the lock and grant the user's purchase.
+     * ATOMIC FULFILLMENT & RESILIENCE GUARD:
+     * If the user hasn't visited a page that synced them to MongoDB yet,
+     * findOneAndUpdate returns null without throwing. We must detect this,
+     * fetch user info from Clerk/Stripe, and create the user. If persistence
+     * fails, we MUST roll back the ProcessedEvent marker and return 500
+     * so Stripe's exponential retry backoff can re-deliver the webhook.
      */
     try {
-      await User.findOneAndUpdate(
+      let dbUser = await User.findOneAndUpdate(
         { clerkId: userId },
-        updateOps
+        updateOps,
+        { new: true }
       );
+
+      if (!dbUser) {
+        // User not in MongoDB yet — sync directly from Clerk SDK or Stripe session
+        let email = session.customer_details?.email || session.customer_email;
+        let name = session.customer_details?.name || "";
+        let imageUrl = "";
+
+        try {
+          const { clerkClient } = await import("@clerk/nextjs/server");
+          const client = await clerkClient();
+          const clerkUser = await client.users.getUser(userId);
+          if (clerkUser) {
+            email = clerkUser.emailAddresses[0]?.emailAddress || email;
+            name =
+              `${clerkUser.firstName || ""} ${clerkUser.lastName || ""}`.trim() ||
+              name;
+            imageUrl = clerkUser.imageUrl || "";
+          }
+        } catch (clerkErr) {
+          console.warn(
+            "[STRIPE_WEBHOOK] Could not query Clerk directly, using Stripe customer details:",
+            clerkErr
+          );
+        }
+
+        if (!email) {
+          throw new Error(`Cannot create user ${userId}: Missing email`);
+        }
+
+        dbUser = await User.create({
+          clerkId: userId,
+          email,
+          name,
+          imageUrl,
+          credits: 5 + credits, // Default starter credits (5) + purchased credits
+          plan: plan && plan !== "Free" ? plan : "Free",
+        });
+      }
+
+      if (!dbUser) {
+        throw new Error(`Failed to persist credits for user ${userId}`);
+      }
     } catch (error) {
+      // Compensating rollback: release marker so Stripe retry can proceed
       await ProcessedEvent.deleteOne({ eventId: event.id });
-      console.error("[STRIPE_WEBHOOK] Failed to grant credits, rolled back marker", error);
+      console.error(
+        "[STRIPE_WEBHOOK] Failed to grant credits, rolled back marker",
+        error
+      );
       return new NextResponse("Failed to grant credits", { status: 500 });
     }
   }

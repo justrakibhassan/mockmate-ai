@@ -104,3 +104,31 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  header,
+  nav,
+  .no-print,
+  button,
+  .action-buttons {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+  }
+
+  /* Keep accordion contents visible for complete printed report */
+  [data-slot="accordion-content"],
+  [data-state="closed"] + [role="region"] {
+    display: block !important;
+    height: auto !important;
+    opacity: 1 !important;
+  }
+
+  .print-avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}

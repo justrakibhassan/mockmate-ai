@@ -24,11 +24,11 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 
-interface Interview {
+export interface DashboardInterviewItem {
   _id: string;
   jobPosition: string;
-  jobDesc: string;
-  jobExperience: string;
+  jobDesc?: string;
+  jobExperience?: string;
   questions?: string[];
   answers?: { question: string; rating?: number }[];
   status: "pending" | "completed";
@@ -37,11 +37,13 @@ interface Interview {
 }
 
 interface InterviewListProps {
-  initialInterviews?: Interview[];
+  initialInterviews?: DashboardInterviewItem[];
 }
 
 export const InterviewList = ({ initialInterviews }: InterviewListProps) => {
-  const [interviews, setInterviews] = useState<Interview[]>(initialInterviews || []);
+  const [interviews, setInterviews] = useState<DashboardInterviewItem[]>(
+    initialInterviews || []
+  );
   const [loading, setLoading] = useState(!initialInterviews);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 

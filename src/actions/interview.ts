@@ -203,9 +203,10 @@ export async function getUserInterviews() {
 
     await dbConnect();
 
-    const interviews = await Interview.find({ clerkId: userId }).sort({
-      createdAt: -1,
-    });
+    const interviews = await Interview.find({ clerkId: userId })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
 
     return {
       success: true,
@@ -272,27 +273,41 @@ export async function saveUserAnswer(data: {
     }
 
     /**
-     * PATTERN 3: COST & QUOTA ABUSE HARDENING (Decoupled Answering)
-     * Saving candidate responses is a fast, bounded O(1) MongoDB write (<50ms).
-     * By decoupling answer persistence from AI evaluation, we eliminate the vulnerability
-     * where malicious users or automated scripts could loop saveUserAnswer to burn
-     * unlimited Gemini quota without spending any credits.
+     * PATTERN 3: ATOMIC POSITIONAL UPDATES (Prevents Read-Modify-Write Race)
+     * If multiple answers are saved concurrently, atomic positional operators
+     * update only the specific array element without full document overwriting.
+     * Also enforces status !== 'completed' at the database query level.
      */
-    const existingIndex = interview.answers.findIndex(
-      (ans: { question: string }) => ans.question === data.question
+    const updateResult = await Interview.updateOne(
+      {
+        _id: data.interviewId,
+        clerkId: userId,
+        status: { $ne: "completed" },
+        "answers.question": data.question,
+      },
+      {
+        $set: { "answers.$.answer": trimmedAnswer },
+      }
     );
 
-    if (existingIndex === -1) {
-      interview.answers.push({
-        question: data.question,
-        answer: trimmedAnswer,
-      });
-    } else {
-      interview.answers[existingIndex].answer = trimmedAnswer;
+    if (updateResult.matchedCount === 0) {
+      await Interview.updateOne(
+        {
+          _id: data.interviewId,
+          clerkId: userId,
+          status: { $ne: "completed" },
+          "answers.question": { $ne: data.question },
+        },
+        {
+          $push: {
+            answers: {
+              question: data.question,
+              answer: trimmedAnswer,
+            },
+          },
+        }
+      );
     }
-
-    interview.markModified("answers");
-    await interview.save();
 
     return { success: true };
   } catch (error: unknown) {
@@ -364,17 +379,24 @@ export async function completeAndEvaluateInterview(interviewId: string) {
       }
     );
 
-    const prompt = `You are an expert technical interviewer evaluating candidate answers for the position: ${interview.jobPosition}.
+    const prompt = `You are a Principal Software Engineering hiring manager evaluating candidate answers for the position: ${interview.jobPosition}.
 Job Description: ${interview.jobDesc}
 Questions and Candidate Answers: ${JSON.stringify(questionsAndAnswers)}.
 
-Evaluate each answer professionally against the technical requirements.
+Evaluate each answer thoroughly across 3 industry-standard evaluation dimensions:
+1. technicalAccuracy (1-10): Correctness of concepts, terminology, algorithms, and practical domain knowledge.
+2. communication (1-10): Structure, STAR methodology, clarity, and conciseness.
+3. architectureTradeoffs (1-10): Awareness of trade-offs, scaling considerations, edge cases, and failure modes.
+
 Provide your response strictly in JSON format as an array of objects matching the answers:
 [
   {
     "question": "exact question text",
-    "rating": 1-10 (integer score based on technical accuracy, clarity, and completeness),
-    "feedback": "2-3 constructive sentences detailing strengths and specific areas to improve"
+    "technicalAccuracy": 1-10 (integer),
+    "communication": 1-10 (integer),
+    "architectureTradeoffs": 1-10 (integer),
+    "rating": 1-10 (overall composite integer score),
+    "feedback": "2-3 targeted, actionable sentences detailing candidate strengths and specific engineering improvements"
   }
 ]
 Do not include any other text or markdown formatting outside the JSON array.`;
@@ -401,6 +423,9 @@ Do not include any other text or markdown formatting outside the JSON array.`;
     let jsonFeedback: Array<{
       question?: string;
       rating?: number;
+      technicalAccuracy?: number;
+      communication?: number;
+      architectureTradeoffs?: number;
       feedback?: string;
       idealAnswer?: string;
     }>;
@@ -419,6 +444,11 @@ Do not include any other text or markdown formatting outside the JSON array.`;
     let totalRating = 0;
     let ratedCount = 0;
 
+    const clampScore = (score: unknown, fallback: number) =>
+      typeof score === "number" && !isNaN(score)
+        ? Math.min(Math.max(Math.round(score), 1), 10)
+        : fallback;
+
     interview.answers = interview.answers.map(
       (ans: { question: string; answer: string }, idx: number) => {
         const feedbackItem =
@@ -431,10 +461,11 @@ Do not include any other text or markdown formatting outside the JSON array.`;
           jsonFeedback[idx] ||
           {};
 
-        const rating =
-          typeof feedbackItem.rating === "number"
-            ? Math.min(Math.max(Math.round(feedbackItem.rating), 1), 10)
-            : 5;
+        const rating = clampScore(feedbackItem.rating, 6);
+        const technicalAccuracy = clampScore(feedbackItem.technicalAccuracy, rating);
+        const communication = clampScore(feedbackItem.communication, rating);
+        const architectureTradeoffs = clampScore(feedbackItem.architectureTradeoffs, rating);
+
         totalRating += rating;
         ratedCount++;
 
@@ -450,9 +481,12 @@ Do not include any other text or markdown formatting outside the JSON array.`;
           question: ans.question,
           answer: ans.answer,
           rating,
+          technicalAccuracy,
+          communication,
+          architectureTradeoffs,
           feedback:
             feedbackItem.feedback ||
-            "Good effort. Focus on adding more specific technical details and architecture choices.",
+            "Good effort. Focus on adding more specific technical details, architecture trade-offs, and metrics.",
           idealAnswer:
             storedIdeal ||
             feedbackItem.idealAnswer ||

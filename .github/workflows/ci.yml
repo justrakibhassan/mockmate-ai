@@ -1,0 +1,42 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    name: Lint & Build Validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Run Linting
+        run: npm run lint
+
+      - name: Run Unit Tests
+        run: npm test
+
+      - name: Run Production Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_mock_clerk_publishable_key
+          CLERK_SECRET_KEY: sk_test_mock_clerk_secret_key
+          MONGODB_URI: mongodb://localhost:27017/mockmate_ci
+          GEMINI_API_KEY: mock_gemini_api_key
+          STRIPE_SECRET_KEY: sk_test_mock_stripe_key
+          STRIPE_WEBHOOK_SECRET: whsec_mock_stripe_webhook_secret
+          NEXT_PUBLIC_APP_URL: http://localhost:3000

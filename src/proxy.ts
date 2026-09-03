@@ -5,28 +5,50 @@ const isProtectedRoute = createRouteMatcher([
   '/interview(.*)',
 ]);
 
-// Simple in-memory rate limit (Reset on edge cold starts)
-const rateLimitMap = new Map();
+// Bounded in-memory rate limiter with TTL pruning
+interface RateLimitRecord {
+  count: number;
+  resetTime: number;
+}
 
-export default clerkMiddleware(async (auth, req) => {
-  const ip = req.headers.get('x-forwarded-for') || 'anonymous';
-  const limit = 100; // 100 requests
-  const windowMs = 60 * 1000; // 1 minute
+const rateLimitMap = new Map<string, RateLimitRecord>();
+const MAX_ENTRIES = 2000;
+const LIMIT = 100; // 100 requests per minute
+const WINDOW_MS = 60 * 1000;
 
-  const now = Date.now();
-  const userRate = rateLimitMap.get(ip) || { count: 0, startTime: now };
-
-  if (now - userRate.startTime > windowMs) {
-    userRate.count = 1;
-    userRate.startTime = now;
-  } else {
-    userRate.count++;
+function checkRateLimit(ip: string, now: number): boolean {
+  // Prune expired entries periodically to prevent memory leaks
+  if (rateLimitMap.size > MAX_ENTRIES) {
+    for (const [key, value] of rateLimitMap.entries()) {
+      if (now > value.resetTime) {
+        rateLimitMap.delete(key);
+      }
+    }
   }
 
-  rateLimitMap.set(ip, userRate);
+  const record = rateLimitMap.get(ip);
 
-  if (userRate.count > limit) {
-    return new Response('Too Many Requests', { status: 429 });
+  if (!record || now > record.resetTime) {
+    rateLimitMap.set(ip, { count: 1, resetTime: now + WINDOW_MS });
+    return true;
+  }
+
+  record.count++;
+  return record.count <= LIMIT;
+}
+
+export default clerkMiddleware(async (auth, req) => {
+  // Extract trusted client IP from comma-separated list
+  const rawIp = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "127.0.0.1";
+  const clientIp = rawIp.split(",")[0].trim() || "anonymous";
+
+  const isAllowed = checkRateLimit(clientIp, Date.now());
+
+  if (!isAllowed) {
+    return new Response("Too Many Requests", {
+      status: 429,
+      headers: { "Retry-After": "60" },
+    });
   }
 
   if (isProtectedRoute(req)) await auth.protect();

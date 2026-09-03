@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SignedIn, SignedOut, SignInButton } from "@clerk/nextjs";
-import { BrainCircuit, Star, ArrowRight, CheckCircle2 } from "lucide-react";
+import { BrainCircuit, Star, ArrowRight, CheckCircle2, Sparkles } from "lucide-react";
 
 const AnimatedNumber = ({ value }: { value: number }) => {
   const spring = useSpring(0, { mass: 0.8, stiffness: 75, damping: 15 });
@@ -136,10 +136,21 @@ export const HomeView = () => {
                   <Button
                     size="lg"
                     variant="outline"
-                    className="h-14 px-8 text-lg font-semibold transition-all hover:bg-primary/5 hover:scale-105 active:scale-95"
+                    className="h-14 px-8 text-lg font-semibold transition-all border-primary/20 hover:bg-primary/5 hover:scale-105 active:scale-95"
                     asChild
                   >
-                    <Link href="/how-it-works">See How it Works</Link>
+                    <Link href="/demo">
+                      <Sparkles className="mr-2 h-5 w-5 text-primary" />
+                      Explore Sample Report
+                    </Link>
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="ghost"
+                    className="h-14 px-6 text-base font-medium text-muted-foreground transition-all hover:text-foreground active:scale-95"
+                    asChild
+                  >
+                    <Link href="/how-it-works">How It Works</Link>
                   </Button>
                 </motion.div>
               </motion.div>

@@ -5,7 +5,7 @@
   ### **Production-Hardened AI Mock Interview Platform**
   *A case study in building fault-tolerant, abuse-resistant, and cost-predictable generative AI web applications.*
 
-  [Live Demo](https://mockmate-ai-self.vercel.app/) • [Architecture Deep Dive](#-engineering-architecture--deep-dive) • [Core File Map](#-reviewer-reading-guide)
+  [Live Platform](https://mockmate-ai-self.vercel.app/) • [Instant Recruiter Demo (No Login)](https://mockmate-ai-self.vercel.app/demo) • [Architecture Deep Dive](#-engineering-architecture--deep-dive) • [Core File Map](#-reviewer-reading-guide)
 </div>
 
 ---
