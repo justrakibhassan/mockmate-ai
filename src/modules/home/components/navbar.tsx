@@ -23,9 +23,10 @@ import {
 } from "@clerk/nextjs";
 
 import { usePathname } from "next/navigation";
-import { getUserPlan } from "@/actions/user";
-import { CreditDisplay } from "./credit-display";
+import { getUserSummary } from "@/actions/user";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Coins, Plus } from "lucide-react";
+import { toast } from "sonner";
 
 const navItems = [
   { name: "Home", href: "/" },
@@ -147,8 +148,7 @@ export function Navbar() {
               >
                 <Link href="/dashboard">Start Interview</Link>
               </Button>
-              <CreditDisplay />
-              <PlanBadge />
+              <UserStatus />
               <UserButton afterSignOutUrl="/" />
             </SignedIn>
           </motion.div>
@@ -225,7 +225,7 @@ export function Navbar() {
                       <Link href="/dashboard">Start Interview</Link>
                     </Button>
                     <div className="flex flex-col items-center gap-4 py-2">
-                      <CreditDisplay />
+                      <UserStatus />
                       <UserButton afterSignOutUrl="/" />
                     </div>
                   </SignedIn>
@@ -245,21 +245,63 @@ export function Navbar() {
   );
 }
 
-function PlanBadge() {
-  const [plan, setPlan] = React.useState<string | null>(null);
+function UserStatus() {
+  const [data, setData] = React.useState<{ plan: string; credits: number } | null>(null);
+  const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
-    getUserPlan().then(setPlan);
+    getUserSummary().then(setData);
   }, []);
 
-  if (!plan) return null;
+  const onBuyCredits = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch("/api/checkout", {
+        method: "POST",
+      });
+
+      const res = await response.json();
+
+      if (res.url) {
+        window.location.href = res.url;
+      } else {
+        toast.error("Something went wrong. Please try again.");
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to initiate checkout.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!data) return null;
 
   return (
-    <Badge
-      variant="secondary"
-      className="bg-primary/10 text-primary border-primary/20 font-bold px-3 py-1 scale-95 uppercase tracking-tighter"
-    >
-      {plan} Plan
-    </Badge>
+    <div className="flex items-center gap-2">
+      <Badge
+        variant="outline"
+        className="flex items-center gap-1.5 bg-primary/5 border-primary/20 py-1.5"
+      >
+        <Coins className="h-4 w-4 text-primary" />
+        <span className="font-bold">{data.credits} Credits</span>
+      </Badge>
+      <Button
+        onClick={onBuyCredits}
+        disabled={loading}
+        size="sm"
+        variant="ghost"
+        className="h-8 w-8 p-0 rounded-full hover:bg-primary/10"
+        title="Buy Credits"
+      >
+        <Plus className="h-4 w-4 text-primary" />
+      </Button>
+      <Badge
+        variant="secondary"
+        className="bg-primary/10 text-primary border-primary/20 font-bold px-3 py-1 scale-95 uppercase tracking-tighter"
+      >
+        {data.plan} Plan
+      </Badge>
+    </div>
   );
 }

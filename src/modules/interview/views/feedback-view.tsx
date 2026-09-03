@@ -1,76 +1,93 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { generateFeedback } from "@/actions/interview";
+import React, { useState } from "react";
+import {
+  Trophy,
+  CheckCircle2,
+  TrendingUp,
+  MessageSquare,
+  Star,
+  Home,
+  ArrowRight,
+  AlertCircle,
+  Printer,
+  Sparkles,
+  Loader2,
+} from "lucide-react";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import {
-  CheckCircle2,
-  Trophy,
-  Star,
-  MessageSquare,
-  ArrowRight,
-  TrendingUp,
-  Home,
-  AlertCircle,
-} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { completeAndEvaluateInterview } from "@/actions/interview";
 
 interface FeedbackItem {
   question: string;
   answer: string;
   feedback: string;
   rating: number;
+  technicalAccuracy?: number;
+  communication?: number;
+  architectureTradeoffs?: number;
   idealAnswer: string;
 }
 
 interface FeedbackViewProps {
   interviewId: string;
+  initialFeedback?: FeedbackItem[];
+  initialOverallRating?: number;
+  initialError?: string | null;
+  isCompleted?: boolean;
+  isDemo?: boolean;
 }
 
-export const FeedbackView = ({ interviewId }: FeedbackViewProps) => {
-  const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [overallRating, setOverallRating] = useState(0);
+export const FeedbackView = ({
+  interviewId,
+  initialFeedback = [],
+  initialOverallRating = 0,
+  initialError = null,
+  isCompleted = false,
+  isDemo = false,
+}: FeedbackViewProps) => {
+  const [feedback, setFeedback] = useState<FeedbackItem[]>(initialFeedback);
+  const [evaluating, setEvaluating] = useState(false);
+  const [error, setError] = useState<string | null>(initialError);
+  const [overallRating, setOverallRating] = useState(initialOverallRating);
 
-  useEffect(() => {
-    const fetchFeedback = async () => {
-      try {
-        const result = await generateFeedback(interviewId);
-        if (result.success && result.feedback?.length) {
-          setFeedback(result.feedback);
-
-          // Calculate average rating
-          const total = result.feedback.reduce(
-            (acc: number, item: { rating?: number }) =>
-              acc + (item.rating || 0),
-            0
-          );
-          setOverallRating(Math.round(total / result.feedback.length));
-        } else {
-          setError(result.error || "No feedback is available for this interview.");
-        }
-      } catch (err) {
-        console.error(err);
-        setError("Something went wrong while generating your feedback.");
-      } finally {
-        setLoading(false);
+  const handleManualEvaluate = async () => {
+    setEvaluating(true);
+    setError(null);
+    try {
+      const result = await completeAndEvaluateInterview(interviewId);
+      if (result.success && result.feedback?.length) {
+        setFeedback(result.feedback);
+        const total = result.feedback.reduce(
+          (acc: number, item: { rating?: number }) => acc + (item.rating || 0),
+          0
+        );
+        setOverallRating(
+          typeof result.overallRating === "number"
+            ? result.overallRating
+          : Math.round(total / result.feedback.length)
+        );
+      } else {
+        setError(result.error || "No feedback is available for this interview.");
       }
-    };
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong while evaluating your responses.");
+    } finally {
+      setEvaluating(false);
+    }
+  };
 
-    fetchFeedback();
-  }, [interviewId]);
-
-  if (loading) {
+  if (evaluating) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6">
         <div className="relative">
@@ -87,16 +104,18 @@ export const FeedbackView = ({ interviewId }: FeedbackViewProps) => {
     );
   }
 
-  if (error) {
+  if (error || feedback.length === 0) {
     return (
       <div className="container mx-auto flex min-h-[60vh] max-w-xl flex-col items-center justify-center px-4 text-center">
         <div className="mb-6 flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 text-amber-500">
           <AlertCircle className="h-8 w-8" />
         </div>
-        <h1 className="text-3xl font-bold text-foreground">No Feedback Yet</h1>
-        <p className="mt-3 text-muted-foreground">{error}</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Answer at least one question during the session to get an AI review.
+        <h1 className="text-3xl font-bold text-foreground">
+          {error ? "Notice" : "Evaluation Pending"}
+        </h1>
+        <p className="mt-3 text-muted-foreground">
+          {error ||
+            "This interview has not been evaluated yet. Complete the interview to generate your AI feedback."}
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
           <Button variant="outline" className="h-12 px-6 font-bold" asChild>
@@ -104,11 +123,28 @@ export const FeedbackView = ({ interviewId }: FeedbackViewProps) => {
               <Home className="mr-2 h-5 w-5" /> Back to Dashboard
             </Link>
           </Button>
-          <Button className="h-12 px-6 font-bold" asChild>
-            <Link href={`/interview/${interviewId}/start`}>
-              Resume Interview <ArrowRight className="ml-2 h-5 w-5" />
-            </Link>
-          </Button>
+          {!isCompleted ? (
+            <Button className="h-12 px-6 font-bold" asChild>
+              <Link href={`/interview/${interviewId}/start`}>
+                Resume Interview <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
+            </Button>
+          ) : (
+            <Button
+              className="h-12 px-6 font-bold"
+              onClick={handleManualEvaluate}
+              disabled={evaluating}
+            >
+              {evaluating ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Evaluating...
+                </>
+              ) : (
+                "Evaluate Saved Answers"
+              )}
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -121,6 +157,30 @@ export const FeedbackView = ({ interviewId }: FeedbackViewProps) => {
         animate={{ opacity: 1, y: 0 }}
         className="space-y-10"
       >
+        {isDemo && (
+          <div className="p-5 rounded-3xl bg-primary/10 border border-primary/20 flex flex-col sm:flex-row items-center justify-between gap-4 no-print shadow-lg shadow-primary/5">
+            <div className="flex items-center gap-4">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-md">
+                <Sparkles className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="font-bold text-foreground text-base">Recruiter Showcase Demo</p>
+                <p className="text-xs sm:text-sm text-muted-foreground">
+                  Interactive evaluation report for a Senior Full-Stack Engineer session. No login or mic required to test!
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" asChild className="rounded-xl font-bold">
+                <Link href="/">Back to Home</Link>
+              </Button>
+              <Button size="sm" asChild className="rounded-xl font-bold shadow-md shadow-primary/20">
+                <Link href="/sign-up">Sign Up Free</Link>
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* Congratulations Header */}
         <div className="text-center space-y-4">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500 shadow-lg shadow-emerald-500/20">
@@ -133,6 +193,16 @@ export const FeedbackView = ({ interviewId }: FeedbackViewProps) => {
             You have successfully completed your mock interview. Here is your
             AI-driven performance review.
           </p>
+          <div className="pt-2 no-print">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              className="h-10 px-5 font-bold rounded-xl border-primary/20 hover:bg-primary/5 shadow-xs"
+            >
+              <Printer className="mr-2 h-4 w-4 text-primary" /> Export Evaluation (PDF)
+            </Button>
+          </div>
         </div>
 
         {/* Score Overview */}
@@ -217,24 +287,46 @@ export const FeedbackView = ({ interviewId }: FeedbackViewProps) => {
                     </div>
                   </div>
 
-                  <div className="p-5 rounded-2xl bg-amber-500/5 ring-1 ring-amber-500/20">
+                  <div className="p-5 rounded-2xl bg-amber-500/5 ring-1 ring-amber-500/20 space-y-3">
                     <div className="flex gap-4">
                       <Star className="h-6 w-6 text-amber-500 shrink-0" />
-                      <div>
+                      <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-bold text-amber-600 uppercase text-xs tracking-widest">
-                            Feedback & Rating
+                            Feedback & Evaluation
                           </span>
                           <Badge
                             variant="outline"
-                            className="text-xs bg-amber-100 dark:bg-amber-900/40 border-amber-200 text-amber-700"
+                            className="text-xs font-bold bg-amber-100 dark:bg-amber-900/40 border-amber-200 text-amber-700 dark:text-amber-300"
                           >
-                            Score: {item.rating}/10
+                            Composite Score: {item.rating}/10
                           </Badge>
                         </div>
                         <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap pt-1">
                           {item.feedback}
                         </p>
+                      </div>
+                    </div>
+
+                    {/* Multi-Dimensional Rubric Breakdown */}
+                    <div className="pt-3 border-t border-amber-500/10 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      <div className="flex items-center justify-between rounded-xl bg-background/80 px-3 py-2 text-xs ring-1 ring-slate-200/60 dark:ring-slate-800">
+                        <span className="text-muted-foreground font-medium">Technical Accuracy</span>
+                        <span className="font-bold text-primary">
+                          {item.technicalAccuracy ?? item.rating}/10
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-xl bg-background/80 px-3 py-2 text-xs ring-1 ring-slate-200/60 dark:ring-slate-800">
+                        <span className="text-muted-foreground font-medium">Communication (STAR)</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                          {item.communication ?? item.rating}/10
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between rounded-xl bg-background/80 px-3 py-2 text-xs ring-1 ring-slate-200/60 dark:ring-slate-800">
+                        <span className="text-muted-foreground font-medium">Architecture & Trade-offs</span>
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400">
+                          {item.architectureTradeoffs ?? item.rating}/10
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -245,7 +337,7 @@ export const FeedbackView = ({ interviewId }: FeedbackViewProps) => {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-10">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-10 no-print action-buttons">
           <Button
             size="lg"
             variant="outline"

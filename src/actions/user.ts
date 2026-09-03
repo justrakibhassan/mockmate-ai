@@ -27,6 +27,7 @@ export async function syncUser() {
       {
         upsert: true,
         new: true,
+        setDefaultsOnInsert: true,
       },
     );
 
@@ -40,30 +41,33 @@ export async function syncUser() {
   }
 }
 
-export async function getUserPlan() {
+import { auth } from "@clerk/nextjs/server";
+
+export async function getUserSummary() {
   try {
-    const user = await currentUser();
-    if (!user) return "Free";
+    const { userId } = await auth();
+    if (!userId) {
+      return { plan: "Free", credits: 0 };
+    }
 
     await dbConnect();
-    const dbUser = await User.findOne({ clerkId: user.id });
-    return dbUser?.plan || "Free";
+    const dbUser = await User.findOne({ clerkId: userId }).lean();
+    return {
+      plan: dbUser?.plan || "Free",
+      credits: dbUser?.credits ?? 0,
+    };
   } catch (error) {
-    console.error("Error fetching user plan:", error);
-    return "Free";
+    console.error("Error fetching user summary:", error);
+    return { plan: "Free", credits: 0 };
   }
 }
 
-export async function getUserCredits() {
-  try {
-    const user = await currentUser();
-    if (!user) return 0;
+export async function getUserPlan() {
+  const summary = await getUserSummary();
+  return summary.plan;
+}
 
-    await dbConnect();
-    const dbUser = await User.findOne({ clerkId: user.id });
-    return dbUser?.credits || 0;
-  } catch (error) {
-    console.error("Error fetching user credits:", error);
-    return 0;
-  }
+export async function getUserCredits() {
+  const summary = await getUserSummary();
+  return summary.credits;
 }

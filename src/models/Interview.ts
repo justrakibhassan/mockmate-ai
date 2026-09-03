@@ -6,14 +6,19 @@ export interface IInterview extends Document {
   jobDesc: string;
   jobExperience: string;
   questions: string[];
+  idealAnswers?: string[];
   answers?: {
     question: string;
     answer: string;
     feedback?: string;
     rating?: number;
+    technicalAccuracy?: number;
+    communication?: number;
+    architectureTradeoffs?: number;
     idealAnswer?: string;
   }[];
   status: "pending" | "completed";
+  overallRating?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,12 +30,16 @@ const InterviewSchema: Schema = new Schema(
     jobDesc: { type: String, required: true },
     jobExperience: { type: String, required: true },
     questions: { type: [String], default: [] },
+    idealAnswers: { type: [String], default: [] },
     answers: [
       {
         question: { type: String },
         answer: { type: String },
         feedback: { type: String },
         rating: { type: Number },
+        technicalAccuracy: { type: Number },
+        communication: { type: Number },
+        architectureTradeoffs: { type: Number },
         idealAnswer: { type: String },
       },
     ],
@@ -39,9 +48,12 @@ const InterviewSchema: Schema = new Schema(
       enum: ["pending", "completed"],
       default: "pending",
     },
+    overallRating: { type: Number },
   },
   { timestamps: true }
 );
+
+InterviewSchema.index({ clerkId: 1, createdAt: -1 });
 
 const Interview =
   mongoose.models.Interview ||

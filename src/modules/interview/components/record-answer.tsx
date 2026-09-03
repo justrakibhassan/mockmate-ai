@@ -5,8 +5,9 @@ import React, { useEffect, useState } from "react";
 import SpeechRecognition, {
   useSpeechRecognition,
 } from "react-speech-recognition";
-import { Mic, Square, Loader2, Save } from "lucide-react";
+import { Mic, Square, Loader2, Save, CheckCircle2, AlertCircle, Edit3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { saveUserAnswer } from "@/actions/interview";
 
@@ -22,6 +23,10 @@ export const RecordAnswer = ({
   onSaved,
 }: RecordAnswerProps) => {
   const [saving, setSaving] = useState(false);
+  const [answerText, setAnswerText] = useState("");
+  const [isSaved, setIsSaved] = useState(false);
+  const [manualEdit, setManualEdit] = useState(false);
+
   const {
     transcript,
     listening,
@@ -29,22 +34,33 @@ export const RecordAnswer = ({
     browserSupportsSpeechRecognition,
   } = useSpeechRecognition();
 
-  // Without this, an unsaved transcript from the previous question stays in
-  // the box and would be submitted against the new one.
+  // Reset transcript and input state when active question changes
   useEffect(() => {
     SpeechRecognition.stopListening();
     resetTranscript();
+    setAnswerText("");
+    setIsSaved(false);
+    setManualEdit(false);
   }, [activeQuestion, resetTranscript]);
 
+  // Clean up listening on unmount
   useEffect(() => {
     return () => {
       SpeechRecognition.stopListening();
     };
   }, []);
 
+  // Update answerText from speech transcript when recording
+  useEffect(() => {
+    if (transcript && !manualEdit) {
+      setAnswerText(transcript);
+    }
+  }, [transcript, manualEdit]);
+
   const onSaveAnswer = async () => {
-    if (transcript.length < 10) {
-      toast.warning("Answer is too short. Please speak more.");
+    const trimmed = answerText.trim();
+    if (trimmed.length < 10) {
+      toast.warning("Answer is too short. Please provide at least 10 characters.");
       return;
     }
 
@@ -53,11 +69,11 @@ export const RecordAnswer = ({
       const resp = await saveUserAnswer({
         interviewId,
         question: activeQuestion,
-        answer: transcript,
+        answer: trimmed,
       });
 
       if (resp.success) {
-        resetTranscript();
+        setIsSaved(true);
         onSaved?.(activeQuestion);
         toast.success("Answer saved successfully!");
       } else {
@@ -71,63 +87,98 @@ export const RecordAnswer = ({
     }
   };
 
-  if (!browserSupportsSpeechRecognition) {
-    return <span>Browser doesn&apos;t support speech recognition.</span>;
-  }
+  const isVoiceSupported = browserSupportsSpeechRecognition;
 
   return (
     <div className="flex flex-col items-center gap-6">
-      <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary/10 text-primary relative">
-        {listening && (
-          <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-        )}
-        <Button
-          size="icon"
-          variant="ghost"
-          className={`h-16 w-16 rounded-full transition-all ${
-            listening
-              ? "bg-primary text-white scale-110"
-              : "bg-background hover:bg-primary/5 shadow-lg"
-          }`}
-          onClick={
-            listening
-              ? SpeechRecognition.stopListening
-              : () => SpeechRecognition.startListening({ continuous: true })
-          }
-          aria-label={listening ? "Stop recording" : "Start recording"}
-        >
-          {listening ? (
-            <Square className="h-8 w-8" />
-          ) : (
-            <Mic className="h-8 w-8" />
+      {/* Microphone Record Button (if voice supported) */}
+      {isVoiceSupported ? (
+        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary/10 text-primary relative">
+          {listening && (
+            <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
           )}
-        </Button>
-      </div>
+          <Button
+            size="icon"
+            variant="ghost"
+            className={`h-16 w-16 rounded-full transition-all ${
+              listening
+                ? "bg-primary text-white scale-110 shadow-lg shadow-primary/30"
+                : "bg-background hover:bg-primary/5 shadow-md"
+            }`}
+            onClick={
+              listening
+                ? () => SpeechRecognition.stopListening()
+                : () => {
+                    setManualEdit(false);
+                    SpeechRecognition.startListening({ continuous: true });
+                  }
+            }
+            aria-label={listening ? "Stop recording" : "Start recording"}
+          >
+            {listening ? (
+              <Square className="h-7 w-7" />
+            ) : (
+              <Mic className="h-7 w-7" />
+            )}
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20">
+          <AlertCircle className="h-4 w-4" />
+          Voice input not supported in this browser. You can type your answer below.
+        </div>
+      )}
 
-      <div className="w-full space-y-4">
-        <div
-          aria-live="polite"
-          className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border text-sm min-h-[100px] max-h-[200px] overflow-auto italic text-muted-foreground"
-        >
-          {transcript || "Click the microphone and start speaking your answer..."}
+      {/* Answer Input Area (Supports Speech + Manual Edit) */}
+      <div className="w-full space-y-4 text-left">
+        <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+          <span className="flex items-center gap-1 font-medium">
+            <Edit3 className="h-3.5 w-3.5 text-primary" />
+            {listening ? "Transcribing speech live..." : "Your Answer"}
+          </span>
+          <span>{answerText.length} characters</span>
         </div>
 
+        <Textarea
+          value={answerText}
+          onChange={(e) => {
+            setManualEdit(true);
+            setAnswerText(e.target.value);
+            setIsSaved(false);
+          }}
+          placeholder={
+            isVoiceSupported
+              ? "Click the microphone above and speak, or type your answer directly here..."
+              : "Type your answer here..."
+          }
+          className="min-h-[120px] max-h-[220px] rounded-xl bg-slate-50 dark:bg-slate-900 border text-sm leading-relaxed p-4"
+        />
+
+        {isSaved && (
+          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-2 rounded-lg border border-emerald-500/20">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            Answer saved. You can proceed to the next question or revise and save again.
+          </div>
+        )}
+
         <Button
-          className="w-full h-12 font-bold shadow-md shadow-primary/10"
-          disabled={saving || listening || transcript.length < 10}
+          className="w-full h-12 font-bold shadow-md shadow-primary/10 transition-all hover:scale-[1.01]"
+          disabled={saving || listening || answerText.trim().length < 10}
           onClick={onSaveAnswer}
         >
           {saving ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : isSaved ? (
+            <CheckCircle2 className="mr-2 h-5 w-5 text-emerald-400" />
           ) : (
             <Save className="mr-2 h-5 w-5" />
           )}
-          {saving ? "Saving..." : "Save Answer"}
+          {saving ? "Saving Answer..." : isSaved ? "Update Saved Answer" : "Save Answer"}
         </Button>
 
         {listening && (
-          <p className="text-center text-xs text-muted-foreground">
-            Stop recording to save your answer.
+          <p className="text-center text-xs text-muted-foreground animate-pulse">
+            Recording in progress. Click the square icon to stop before saving.
           </p>
         )}
       </div>

@@ -14,9 +14,36 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "MockMate AI | Master Your Interview with AI",
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL || "https://mockmate-ai-self.vercel.app"
+  ),
+  title: "MockMate AI | Master Technical Interviews with AI",
   description:
-    "MockMate AI is your personal AI-powered interview coach. Master your communication skills and land your dream job with real-time feedback and practice.",
+    "Production-hardened AI mock interview coach. Master technical communication with real-time speech evaluation and multi-dimensional rubric scoring.",
+  openGraph: {
+    title: "MockMate AI | Production-Hardened AI Mock Interview Platform",
+    description:
+      "Master technical communication with real-time speech evaluation and multi-dimensional rubric scoring.",
+    url: "https://mockmate-ai-self.vercel.app",
+    siteName: "MockMate AI",
+    images: [
+      {
+        url: "/mockmate-ai.webp",
+        width: 1200,
+        height: 630,
+        alt: "MockMate AI Platform Preview",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "MockMate AI | Master Technical Interviews",
+    description:
+      "Production-hardened AI mock interview coach with real-time rubric feedback.",
+    images: ["/mockmate-ai.webp"],
+  },
 };
 
 import { Navbar } from "@/modules/home/components/navbar";

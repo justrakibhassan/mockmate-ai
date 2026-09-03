@@ -116,7 +116,7 @@ export const InterviewRoomView = ({ interview }: InterviewRoomViewProps) => {
                     </li>
                     <li className="flex items-center gap-2">
                       <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                      We do not record your video; AI analyzes it locally.
+                      Camera stays private in your browser for self-monitoring. No video is recorded or sent to servers.
                     </li>
                     <li className="flex items-center gap-2">
                       <AlertCircle className="h-4 w-4 text-amber-500" />

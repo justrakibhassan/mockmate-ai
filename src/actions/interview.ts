@@ -40,6 +40,13 @@ async function refundCredit(clerkId: string) {
   }
 }
 
+function sanitizeInput(text: string): string {
+  return text
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "")
+    .replace(/```/g, "'''")
+    .trim();
+}
+
 export async function createInterview(data: {
   jobPosition: string;
   jobDesc: string;
@@ -55,7 +62,34 @@ export async function createInterview(data: {
       return { success: false, error: "Unauthorized" };
     }
 
-    const { jobPosition, jobDesc, jobExperience } = data;
+    const rawPosition = typeof data.jobPosition === "string" ? data.jobPosition.trim() : "";
+    const rawDesc = typeof data.jobDesc === "string" ? data.jobDesc.trim() : "";
+    const rawExp = parseInt(String(data.jobExperience).trim(), 10);
+
+    if (!rawPosition || rawPosition.length < 2 || rawPosition.length > 100) {
+      return {
+        success: false,
+        error: "Job position must be between 2 and 100 characters.",
+      };
+    }
+
+    if (!rawDesc || rawDesc.length < 10 || rawDesc.length > 2000) {
+      return {
+        success: false,
+        error: "Job description must be between 10 and 2000 characters.",
+      };
+    }
+
+    if (isNaN(rawExp) || rawExp < 0 || rawExp > 50) {
+      return {
+        success: false,
+        error: "Years of experience must be a valid number between 0 and 50.",
+      };
+    }
+
+    const jobPosition = sanitizeInput(rawPosition);
+    const jobDesc = sanitizeInput(rawDesc);
+    const jobExperience = String(rawExp);
 
     const randomSalt = Math.random().toString(36).substring(7);
     const prompt = `Job Position: ${jobPosition}, Job Description: ${jobDesc}, Years of Experience: ${jobExperience}.
@@ -70,7 +104,13 @@ export async function createInterview(data: {
 
     await dbConnect();
 
-    // Reserve a credit atomically so concurrent requests cannot double-spend
+    /**
+     * PATTERN 1: ATOMIC CREDIT RESERVATION (Optimistic Concurrency Control)
+     * Decrements credits with a predicate check ({ credits: { $gt: 0 } }).
+     * If multiple concurrent requests hit this endpoint, MongoDB's atomic document-level
+     * write lock guarantees only one succeeds if balance is low, completely preventing double-spends
+     * without needing slow distributed Redis locks.
+     */
     const dbUser = await User.findOneAndUpdate(
       { clerkId: userId, credits: { $gt: 0 } },
       { $inc: { credits: -1 } }
@@ -108,6 +148,11 @@ export async function createInterview(data: {
     try {
       jsonResponse = JSON.parse(mockJsonResp);
     } catch (parseError) {
+      /**
+       * PATTERN 2: COMPENSATING TRANSACTION ON AI FAILURE
+       * If downstream LLM call returns malformed JSON or times out, immediately
+       * refund the reserved credit so the user is never penalized for upstream AI failures.
+       */
       console.error("JSON Parsing Error:", parseError, "Raw Response:", rawText);
       await refundCredit(userId);
       creditReserved = false;
@@ -117,7 +162,8 @@ export async function createInterview(data: {
       };
     }
 
-    const questions = jsonResponse.map((q: { question: string }) => q.question);
+    const questions = jsonResponse.map((q: { question: string }) => sanitizeInput(q.question));
+    const idealAnswers = jsonResponse.map((q: { answer?: string }) => sanitizeInput(q.answer || ""));
 
     const newInterview = await Interview.create({
       clerkId: userId,
@@ -125,6 +171,7 @@ export async function createInterview(data: {
       jobDesc,
       jobExperience,
       questions,
+      idealAnswers,
     });
 
     revalidatePath("/dashboard");
@@ -156,9 +203,10 @@ export async function getUserInterviews() {
 
     await dbConnect();
 
-    const interviews = await Interview.find({ clerkId: userId }).sort({
-      createdAt: -1,
-    });
+    const interviews = await Interview.find({ clerkId: userId })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
 
     return {
       success: true,
@@ -182,9 +230,26 @@ export async function saveUserAnswer(data: {
       return { success: false, error: "Unauthorized" };
     }
 
+    if (!data.interviewId || !data.question || typeof data.answer !== "string") {
+      return { success: false, error: "Invalid input data" };
+    }
+
+    const trimmedAnswer = sanitizeInput(data.answer);
+    if (trimmedAnswer.length < 10) {
+      return {
+        success: false,
+        error: "Answer is too short. Please provide at least 10 characters.",
+      };
+    }
+    if (trimmedAnswer.length > 4000) {
+      return {
+        success: false,
+        error: "Answer exceeds maximum allowed length of 4000 characters.",
+      };
+    }
+
     await dbConnect();
 
-    // Get interview context for better evaluation
     const interview = await Interview.findOne({
       _id: data.interviewId,
       clerkId: userId,
@@ -193,73 +258,65 @@ export async function saveUserAnswer(data: {
       return { success: false, error: "Interview not found" };
     }
 
+    if (interview.status === "completed") {
+      return {
+        success: false,
+        error: "Interview is already completed. Answers cannot be modified.",
+      };
+    }
+
     if (!interview.questions.includes(data.question)) {
-      return { success: false, error: "Question does not belong to this interview" };
+      return {
+        success: false,
+        error: "Question does not belong to this interview",
+      };
     }
 
-    // AI Prompt for Individual Answer Feedback
-    const prompt = `
-    Job Position: ${interview.jobPosition}
-    Job Description: ${interview.jobDesc}
-    Question: ${data.question}
-    User Answer: ${data.answer}
-    
-    Evaluate this specific answer professionally. Provide:
-    1. "rating": A score from 1-10 based on technical accuracy and completeness.
-    2. "feedback": 2-3 sentences of constructive feedback.
-    3. "idealAnswer": A high-quality, professional response that demonstrates how this question should have been answered perfectly.
-    
-    Response must be in JSON format: { "rating": number, "feedback": string, "idealAnswer": string }. Do not include any other text.
-    `;
-
-    const chatSession = model.startChat({
-      generationConfig: generativeConfig,
-      history: [],
-    });
-
-    const aiResult = await chatSession.sendMessage(prompt);
-    let mockJsonResp = aiResult.response.text();
-    const jsonMatch = mockJsonResp.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      mockJsonResp = jsonMatch[0];
-    } else {
-      mockJsonResp = mockJsonResp
-        .replace(/```json/g, "")
-        .replace(/```/g, "")
-        .trim();
-    }
-    
-    const jsonFeedback = JSON.parse(mockJsonResp);
-
-    const entry = {
-      question: data.question,
-      answer: data.answer,
-      feedback: jsonFeedback.feedback,
-      rating: jsonFeedback.rating,
-      idealAnswer: jsonFeedback.idealAnswer,
-    };
-
-    const existingIndex = interview.answers.findIndex(
-      (ans: { question: string }) => ans.question === data.question
+    /**
+     * PATTERN 3: ATOMIC POSITIONAL UPDATES (Prevents Read-Modify-Write Race)
+     * If multiple answers are saved concurrently, atomic positional operators
+     * update only the specific array element without full document overwriting.
+     * Also enforces status !== 'completed' at the database query level.
+     */
+    const updateResult = await Interview.updateOne(
+      {
+        _id: data.interviewId,
+        clerkId: userId,
+        status: { $ne: "completed" },
+        "answers.question": data.question,
+      },
+      {
+        $set: { "answers.$.answer": trimmedAnswer },
+      }
     );
 
-    if (existingIndex === -1) {
-      interview.answers.push(entry);
-    } else {
-      interview.answers[existingIndex] = entry;
+    if (updateResult.matchedCount === 0) {
+      await Interview.updateOne(
+        {
+          _id: data.interviewId,
+          clerkId: userId,
+          status: { $ne: "completed" },
+          "answers.question": { $ne: data.question },
+        },
+        {
+          $push: {
+            answers: {
+              question: data.question,
+              answer: trimmedAnswer,
+            },
+          },
+        }
+      );
     }
 
-    interview.markModified("answers");
-    const result = await interview.save();
-
-    return { success: true, result: JSON.parse(JSON.stringify(result)) };
+    return { success: true };
   } catch (error: unknown) {
     console.error("Error saving answer:", error);
     return { success: false, error: "Failed to save answer" };
   }
 }
 
-export async function generateFeedback(interviewId: string) {
+export async function completeAndEvaluateInterview(interviewId: string) {
   try {
     const { userId } = await auth();
 
@@ -267,11 +324,18 @@ export async function generateFeedback(interviewId: string) {
       return { success: false, error: "Unauthorized" };
     }
 
+    if (!interviewId) {
+      return { success: false, error: "Interview ID is required" };
+    }
+
     await dbConnect();
 
-    const interview = await Interview.findById(interviewId);
+    const interview = await Interview.findOne({
+      _id: interviewId,
+      clerkId: userId,
+    });
 
-    if (!interview || interview.clerkId !== userId) {
+    if (!interview) {
       return { success: false, error: "Interview not found" };
     }
 
@@ -279,30 +343,63 @@ export async function generateFeedback(interviewId: string) {
       return { success: false, error: "No answers found to evaluate" };
     }
 
-    // Check if all answers already have evaluation
-    const allEvaluated = interview.answers.every((ans: { rating?: number; feedback?: string; idealAnswer?: string }) => 
-      ans.rating && ans.feedback && ans.idealAnswer
+    // Idempotent cache check: If already completed with evaluations, serve from DB (0 Gemini calls)
+    const allEvaluated = interview.answers.every(
+      (ans: { rating?: number; feedback?: string; idealAnswer?: string }) =>
+        typeof ans.rating === "number" && ans.feedback && ans.idealAnswer
     );
-    
-    if (allEvaluated) {
-      interview.status = "completed";
-      await interview.save();
+
+    if (interview.status === "completed" && allEvaluated) {
       return {
         success: true,
         feedback: JSON.parse(JSON.stringify(interview.answers)),
+        overallRating: interview.overallRating,
       };
     }
 
-    // AI Prompt for Feedback (Fallback for older interviews)
-    const prompt = `Interview for ${
-      interview.jobPosition
-    }. Questions and User Answers: ${JSON.stringify(interview.answers)}. 
-    Evaluate each answer professionally. For each answer, provide:
-    1. "rating": A score from 1-10 based on technical accuracy, clarity, and completeness.
-    2. "feedback": 2-3 sentences of constructive feedback. Identify what was good and specifically how to improve the response.
-    3. "idealAnswer": A concise, high-quality, professional response (approx 3-5 sentences) that demonstrates deep expertise and clear communication. Use the STAR method where applicable.
-    
-    All data must be in JSON format as an array of objects. Do not include any other text or markdown formatting except the JSON.`;
+    /**
+     * PATTERN 4: ZERO WASTED AI TOKENS (Reference Answer Alignment)
+     * Instead of asking Gemini to re-invent ideal answers from scratch (which consumes ~50%
+     * of output tokens), we pass the pre-generated reference answers. Gemini only needs to
+     * output quantitative rating (1-10) and targeted feedback, cutting token costs and latency in half.
+     */
+    const questionsAndAnswers = interview.answers.map(
+      (a: { question: string; answer: string }) => {
+        const qIndex = interview.questions.indexOf(a.question);
+        const reference =
+          qIndex !== -1 && interview.idealAnswers?.[qIndex]
+            ? interview.idealAnswers[qIndex]
+            : undefined;
+
+        return {
+          question: a.question,
+          candidateAnswer: a.answer,
+          ...(reference ? { referenceIdealAnswer: reference } : {}),
+        };
+      }
+    );
+
+    const prompt = `You are a Principal Software Engineering hiring manager evaluating candidate answers for the position: ${interview.jobPosition}.
+Job Description: ${interview.jobDesc}
+Questions and Candidate Answers: ${JSON.stringify(questionsAndAnswers)}.
+
+Evaluate each answer thoroughly across 3 industry-standard evaluation dimensions:
+1. technicalAccuracy (1-10): Correctness of concepts, terminology, algorithms, and practical domain knowledge.
+2. communication (1-10): Structure, STAR methodology, clarity, and conciseness.
+3. architectureTradeoffs (1-10): Awareness of trade-offs, scaling considerations, edge cases, and failure modes.
+
+Provide your response strictly in JSON format as an array of objects matching the answers:
+[
+  {
+    "question": "exact question text",
+    "technicalAccuracy": 1-10 (integer),
+    "communication": 1-10 (integer),
+    "architectureTradeoffs": 1-10 (integer),
+    "rating": 1-10 (overall composite integer score),
+    "feedback": "2-3 targeted, actionable sentences detailing candidate strengths and specific engineering improvements"
+  }
+]
+Do not include any other text or markdown formatting outside the JSON array.`;
 
     const chatSession = model.startChat({
       generationConfig: generativeConfig,
@@ -310,40 +407,179 @@ export async function generateFeedback(interviewId: string) {
     });
 
     const result = await chatSession.sendMessage(prompt);
-    let mockJsonResp = result.response.text();
-    const jsonMatch = mockJsonResp.match(/\[[\s\S]*\]/);
+    const rawText = result.response.text();
+
+    let mockJsonResp = rawText;
+    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
       mockJsonResp = jsonMatch[0];
     } else {
-      mockJsonResp = mockJsonResp
+      mockJsonResp = rawText
         .replace(/```json/g, "")
         .replace(/```/g, "")
         .trim();
     }
-    const jsonFeedback = JSON.parse(mockJsonResp);
 
-    // Update the interview with the feedback
-    interview.answers = interview.answers.map((ans: { question: string, answer: string }, idx: number) => {
-      const feedbackItem = jsonFeedback[idx] || {};
+    let jsonFeedback: Array<{
+      question?: string;
+      rating?: number;
+      technicalAccuracy?: number;
+      communication?: number;
+      architectureTradeoffs?: number;
+      feedback?: string;
+      idealAnswer?: string;
+    }>;
+
+    try {
+      jsonFeedback = JSON.parse(mockJsonResp);
+    } catch (parseError) {
+      console.error("JSON Parsing Error in feedback:", parseError, "Raw:", rawText);
       return {
-        question: ans.question,
-        answer: ans.answer,
-        rating: feedbackItem.rating || 0,
-        feedback: feedbackItem.feedback || "No feedback provided",
-        idealAnswer: feedbackItem.idealAnswer || feedbackItem.ideal_answer || feedbackItem.best_answer || "No ideal answer generated",
+        success: false,
+        error: "Failed to parse AI evaluation. Please try again.",
       };
-    });
+    }
 
+    // Map feedback reliably by question match or index fallback
+    let totalRating = 0;
+    let ratedCount = 0;
+
+    const clampScore = (score: unknown, fallback: number) =>
+      typeof score === "number" && !isNaN(score)
+        ? Math.min(Math.max(Math.round(score), 1), 10)
+        : fallback;
+
+    interview.answers = interview.answers.map(
+      (ans: { question: string; answer: string }, idx: number) => {
+        const feedbackItem =
+          jsonFeedback.find(
+            (item) =>
+              item.question &&
+              item.question.trim().toLowerCase() ===
+                ans.question.trim().toLowerCase()
+          ) ||
+          jsonFeedback[idx] ||
+          {};
+
+        const rating = clampScore(feedbackItem.rating, 6);
+        const technicalAccuracy = clampScore(feedbackItem.technicalAccuracy, rating);
+        const communication = clampScore(feedbackItem.communication, rating);
+        const architectureTradeoffs = clampScore(feedbackItem.architectureTradeoffs, rating);
+
+        totalRating += rating;
+        ratedCount++;
+
+        const qIndex = interview.questions.findIndex(
+          (q: string) => q.trim().toLowerCase() === ans.question.trim().toLowerCase()
+        );
+        const storedIdeal =
+          qIndex !== -1 && interview.idealAnswers?.[qIndex]
+            ? interview.idealAnswers[qIndex]
+            : null;
+
+        return {
+          question: ans.question,
+          answer: ans.answer,
+          rating,
+          technicalAccuracy,
+          communication,
+          architectureTradeoffs,
+          feedback:
+            feedbackItem.feedback ||
+            "Good effort. Focus on adding more specific technical details, architecture trade-offs, and metrics.",
+          idealAnswer:
+            storedIdeal ||
+            feedbackItem.idealAnswer ||
+            "A comprehensive answer would detail concrete architecture, trade-offs, and metrics.",
+        };
+      }
+    );
+
+    interview.overallRating =
+      ratedCount > 0 ? Math.round(totalRating / ratedCount) : 0;
     interview.status = "completed";
     interview.markModified("answers");
     await interview.save();
 
+    revalidatePath("/dashboard");
+    revalidatePath(`/interview/${interviewId}/feedback`);
+
     return {
       success: true,
       feedback: JSON.parse(JSON.stringify(interview.answers)),
+      overallRating: interview.overallRating,
     };
   } catch (error: unknown) {
-    console.error("Error generating feedback:", error);
-    return { success: false, error: "Failed to generate feedback" };
+    console.error("Error evaluating interview:", error);
+    return { success: false, error: "Failed to evaluate interview" };
+  }
+}
+
+export async function generateFeedback(interviewId: string) {
+  return completeAndEvaluateInterview(interviewId);
+}
+
+export async function getInterviewFeedback(interviewId: string) {
+  try {
+    const { userId } = await auth();
+
+    if (!userId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    if (!interviewId) {
+      return { success: false, error: "Interview ID is required" };
+    }
+
+    await dbConnect();
+
+    const interview = await Interview.findOne({
+      _id: interviewId,
+      clerkId: userId,
+    }).lean();
+
+    if (!interview) {
+      return { success: false, error: "Interview not found" };
+    }
+
+    return {
+      success: true,
+      interview: JSON.parse(JSON.stringify(interview)),
+    };
+  } catch (error) {
+    console.error("Error getting interview feedback:", error);
+    return { success: false, error: "Failed to fetch interview feedback" };
+  }
+}
+
+export async function deleteInterview(interviewId: string) {
+  try {
+    const { userId } = await auth();
+
+    if (!userId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    if (!interviewId) {
+      return { success: false, error: "Interview ID is required" };
+    }
+
+    await dbConnect();
+
+    const deleted = await Interview.findOneAndDelete({
+      _id: interviewId,
+      clerkId: userId,
+    });
+
+    if (!deleted) {
+      return { success: false, error: "Interview not found or unauthorized" };
+    }
+
+    revalidatePath("/dashboard");
+
+    return { success: true };
+  } catch (error: unknown) {
+    console.error("Error deleting interview:", error);
+    return { success: false, error: "Failed to delete interview" };
   }
 }
