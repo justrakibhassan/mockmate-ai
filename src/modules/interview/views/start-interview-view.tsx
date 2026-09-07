@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import Webcam from "react-webcam";
 import {
   BrainCircuit,
@@ -9,13 +9,12 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
-  Lightbulb,
   Video,
   VideoOff,
   Loader2,
+  RefreshCw,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { motion, AnimatePresence } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -32,9 +31,26 @@ interface StartInterviewViewProps {
   };
 }
 
+function parseCameraError(err: unknown): string {
+  if (typeof err === "string") return err;
+  const error = err as { name?: string; message?: string };
+  if (error?.name === "NotAllowedError" || error?.name === "PermissionDeniedError") {
+    return "Camera permission denied. Allow camera access in your browser address bar.";
+  }
+  if (error?.name === "NotFoundError" || error?.name === "DevicesNotFoundError") {
+    return "No camera device detected. Please connect a webcam.";
+  }
+  if (error?.name === "NotReadableError" || error?.name === "TrackStartError") {
+    return "Camera is in use by another app (Zoom, Teams, or another tab).";
+  }
+  return error?.message || "Failed to access camera.";
+}
+
 export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
-  const [webcamError, setWebcamError] = useState(false);
+  const [webcamEnabled, setWebcamEnabled] = useState(true);
+  const [webcamError, setWebcamError] = useState<string | null>(null);
+  const videoStreamRef = useRef<MediaStream | null>(null);
   const [answered, setAnswered] = useState<Set<string>>(
     () => new Set((interview.answers ?? []).map((a) => a.question))
   );
@@ -42,7 +58,18 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
   const [completing, setCompleting] = useState(false);
   const router = useRouter();
 
+  // Clean up media tracks when leaving the interview room
+  useEffect(() => {
+    return () => {
+      if (videoStreamRef.current) {
+        videoStreamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+        videoStreamRef.current = null;
+      }
+    };
+  }, []);
+
   const questions = interview.questions;
+  const progress = Math.round((answered.size / questions.length) * 100);
 
   // AI Text-to-Speech
   const readQuestion = useCallback((text: string) => {
@@ -115,88 +142,104 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
     }
   };
 
+  const cameraActive = webcamEnabled && !webcamError;
+
   return (
-    <div className="container mx-auto px-4 py-8 md:py-12">
-      {/* Session Header */}
-      <div className="mb-10 flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b pb-8">
-        <div className="flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/20">
-            <BrainCircuit className="h-7 w-7 text-primary-foreground" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">
-              {interview.jobPosition} Interview
-            </h1>
-            <div className="text-sm text-muted-foreground flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />{" "}
-              Live Session Active
+    <div className="mx-auto w-full max-w-6xl px-4 pb-16">
+      {/* Sticky Session Bar */}
+      <div className="sticky top-0 z-20 -mx-4 mb-8 border-b border-border/70 bg-background/80 px-4 py-3 backdrop-blur-lg">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary shadow-md shadow-primary/25">
+              <BrainCircuit className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-bold text-foreground">
+                {interview.jobPosition}
+              </p>
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                Live session · {answered.size}/{questions.length} answered
+              </p>
             </div>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-muted-foreground">
-            Session ID:
-          </span>
-          <Badge variant="secondary" className="font-mono">
-            {interview._id.slice(-8).toUpperCase()}
-          </Badge>
-        </div>
-      </div>
 
-      <div className="grid gap-8 lg:grid-cols-12">
-        {/* Left Column: Question & Controls (Content Focused) */}
-        <div className="lg:col-span-7 space-y-8">
-          {/* Question Navigator */}
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="hidden items-center gap-1.5 sm:flex">
             {questions.map((question, index) => {
               const isAnswered = answered.has(question);
+              const isActive = activeQuestionIndex === index;
               return (
-                <Button
+                <button
                   key={index}
-                  variant={activeQuestionIndex === index ? "default" : "outline"}
-                  size="sm"
+                  type="button"
                   aria-label={`Question ${index + 1}${
                     isAnswered ? " (answered)" : " (not answered)"
                   }`}
-                  aria-current={activeQuestionIndex === index ? "step" : undefined}
-                  className={`relative w-10 h-10 rounded-xl font-bold transition-all ${
-                    activeQuestionIndex === index
-                      ? "scale-110 shadow-md shadow-primary/20"
-                      : ""
-                  } ${
-                    isAnswered && activeQuestionIndex !== index
-                      ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-500"
-                      : ""
-                  }`}
+                  aria-current={isActive ? "step" : undefined}
                   onClick={() => setActiveQuestionIndex(index)}
-                >
-                  {index + 1}
-                  {isAnswered && (
-                    <CheckCircle2 className="absolute -right-1 -top-1 h-4 w-4 rounded-full bg-background text-emerald-500" />
-                  )}
-                </Button>
+                  className={`relative h-2.5 w-2.5 rounded-full transition-all duration-300 ${
+                    isAnswered
+                      ? "bg-emerald-500"
+                      : isActive
+                        ? "h-3 w-3 bg-primary"
+                        : "bg-border hover:bg-muted-foreground/40"
+                  } ${isActive ? "ring-4 ring-primary/15" : ""}`}
+                />
               );
             })}
-            <span className="ml-2 text-sm text-muted-foreground">
-              {answered.size}/{questions.length} answered
-            </span>
           </div>
 
-          {/* Active Question Card */}
+          <Badge
+            variant="outline"
+            className="hidden shrink-0 border-emerald-500/20 bg-emerald-500/10 px-3 py-1 font-mono text-xs text-emerald-600 md:inline-flex dark:text-emerald-400"
+          >
+            {progress}% complete
+          </Badge>
+        </div>
+
+        {/* Progress rail */}
+        <div className="mt-3 h-1 overflow-hidden rounded-full bg-border">
+          <motion.div
+            className="h-full rounded-full bg-linear-to-r from-primary to-emerald-500"
+            initial={{ width: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.5, ease: "easeOut" }}
+          />
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-12">
+        {/* Left: Question Flow */}
+        <div className="space-y-6 lg:col-span-7">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeQuestionIndex}
-              initial={{ opacity: 0, x: 20 }}
+              initial={{ opacity: 0, x: 24 }}
               animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -20 }}
-              transition={{ duration: 0.3 }}
+              exit={{ opacity: 0, x: -24 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="relative overflow-hidden rounded-2xl border border-border/70 bg-card/60 shadow-sm"
             >
-              <Card className="relative overflow-hidden border-none bg-background/50 shadow-xl ring-1 ring-primary/5">
-                <div className="absolute top-0 right-0 p-4">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-linear-to-b from-primary/6 to-transparent"
+              />
+
+              <div className="relative p-6 sm:p-8">
+                <div className="mb-5 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
+                  {activeQuestionIndex + 1}
+                </span>
+                <span className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+                  Question {activeQuestionIndex + 1} of {questions.length}
+                </span>
+                  </div>
+
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="rounded-full hover:bg-primary/10"
+                    className="h-9 w-9 rounded-full hover:bg-primary/10"
                     onClick={() =>
                       speaking
                         ? stopSpeaking()
@@ -207,125 +250,168 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
                     }
                   >
                     {speaking ? (
-                      <VolumeX className="h-6 w-6 text-primary" />
+                      <VolumeX className="h-4.5 w-4.5 text-primary" />
                     ) : (
-                      <Volume2 className="h-6 w-6 text-primary" />
+                      <Volume2 className="h-4.5 w-4.5 text-primary" />
                     )}
                   </Button>
                 </div>
-                <CardHeader className="pt-8">
-                  <CardTitle className="text-xl font-bold text-muted-foreground uppercase tracking-wider mb-2">
-                    Question #{activeQuestionIndex + 1}
-                  </CardTitle>
-                  <p className="text-2xl font-medium leading-tight text-foreground sm:text-3xl">
-                    {questions[activeQuestionIndex]}
-                  </p>
-                </CardHeader>
-                <CardContent className="pb-8">
-                  <div className="flex items-start gap-4 p-4 rounded-2xl bg-primary/5 ring-1 ring-primary/10">
-                    <Lightbulb className="h-6 w-6 text-primary shrink-0 mt-1" />
-                    <p className="text-sm text-muted-foreground">
-                      <strong>Tip:</strong> Be concise and use specific examples
-                      from your past experience to answer this question.
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
+
+                <p className="text-xl leading-relaxed font-medium text-foreground sm:text-2xl">
+                  {questions[activeQuestionIndex]}
+                </p>
+
+                <p className="mt-6 flex items-start gap-2 rounded-xl border border-border/70 bg-background/50 p-3.5 text-xs leading-relaxed text-muted-foreground">
+                  <span className="font-semibold text-primary">Tip:</span>
+                  Structure your answer with a concrete example — situation,
+                  action, result.
+                </p>
+              </div>
             </motion.div>
           </AnimatePresence>
 
+          {/* Answer Recorder */}
+          <div className="rounded-2xl border border-border/70 bg-card/60 p-6 shadow-sm sm:p-8">
+            <RecordAnswer
+              interviewId={interview._id}
+              activeQuestion={questions[activeQuestionIndex]}
+              onSaved={(question) =>
+                setAnswered((prev) => new Set(prev).add(question))
+              }
+            />
+          </div>
+
           {/* Navigation Controls */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <Button
               variant="outline"
               size="lg"
               disabled={activeQuestionIndex === 0}
               onClick={() => setActiveQuestionIndex((prev) => prev - 1)}
-              className="h-14 px-8 font-bold"
+              className="h-12 px-6 font-semibold"
             >
-              <ChevronLeft className="mr-2 h-5 w-5" /> Previous Question
+              <ChevronLeft className="mr-1.5 h-4 w-4" /> Previous
             </Button>
 
             {activeQuestionIndex === questions.length - 1 ? (
               <Button
                 size="lg"
-                variant="default"
                 disabled={completing}
-                className="h-14 px-8 font-extrabold bg-linear-to-r from-emerald-600 to-teal-500 shadow-xl shadow-emerald-500/20"
+                className="h-12 bg-linear-to-r from-emerald-600 to-teal-500 px-6 font-bold shadow-lg shadow-emerald-500/25"
                 onClick={onEndInterview}
               >
                 {completing ? (
                   <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Evaluating Responses...
                   </>
                 ) : (
                   <>
-                    End Interview <CheckCircle2 className="ml-2 h-5 w-5" />
+                    End Interview <CheckCircle2 className="ml-2 h-4 w-4" />
                   </>
                 )}
               </Button>
             ) : (
               <Button
                 size="lg"
-                className="h-14 px-8 font-bold"
+                className="h-12 px-6 font-semibold shadow-md shadow-primary/20"
                 onClick={() => setActiveQuestionIndex((prev) => prev + 1)}
               >
-                Next Question <ChevronRight className="ml-2 h-5 w-5" />
+                Next Question <ChevronRight className="ml-1.5 h-4 w-4" />
               </Button>
             )}
           </div>
         </div>
 
-        {/* Right Column: Experience Panel (Webcam & Feedback) */}
-        <div className="lg:col-span-5 space-y-6">
-          <div className="relative aspect-video overflow-hidden rounded-3xl bg-slate-900 shadow-2xl ring-4 ring-background">
-            {webcamError ? (
-              <div className="flex h-full w-full flex-col items-center justify-center gap-4 text-slate-400 bg-slate-950">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-900">
-                  <VideoOff className="h-8 w-8 text-amber-500" />
-                </div>
-                <p className="text-sm font-medium">Camera Offline (Voice-Only Mode)</p>
-              </div>
-            ) : (
+        {/* Right: Presence Panel */}
+        <div className="space-y-4 lg:col-span-5 lg:sticky lg:top-32">
+          <div className="relative aspect-video overflow-hidden rounded-2xl border border-border/70 bg-slate-950 shadow-lg">
+            {cameraActive ? (
               <Webcam
                 mirrored={true}
-                onUserMediaError={() => setWebcamError(true)}
+                onUserMedia={(stream) => {
+                  videoStreamRef.current = stream;
+                  setWebcamError(null);
+                }}
+                onUserMediaError={(err) => {
+                  setWebcamError(parseCameraError(err));
+                }}
                 className="h-full w-full object-cover opacity-80"
               />
+            ) : (
+              <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-slate-950 p-6 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5">
+                  <VideoOff className="h-6 w-6 text-amber-500" />
+                </div>
+                <div className="max-w-xs space-y-1">
+                  <p className="text-sm font-semibold text-white">
+                    {webcamError ? "Camera Unavailable" : "Camera Off (Voice-Only Mode)"}
+                  </p>
+                  {webcamError && (
+                    <p className="text-xs leading-relaxed text-slate-400">{webcamError}</p>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  type="button"
+                  onClick={() => {
+                    setWebcamError(null);
+                    setWebcamEnabled(true);
+                  }}
+                  className="mt-1 h-8 border-white/20 text-xs text-white hover:bg-white/10"
+                >
+                  <RefreshCw className="mr-1.5 h-3 w-3" /> Retry Camera
+                </Button>
+              </div>
             )}
-            <div className="absolute inset-0 bg-linear-to-t from-black/60 to-transparent flex items-end p-6">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary shadow-lg">
-                  {webcamError ? (
-                    <VideoOff className="h-5 w-5 text-white" />
+
+            <div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent p-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/90 shadow-lg">
+                  {cameraActive ? (
+                    <Video className="h-4 w-4 text-white" />
                   ) : (
-                    <Video className="h-5 w-5 text-white" />
+                    <VideoOff className="h-4 w-4 text-white" />
                   )}
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-white uppercase tracking-widest opacity-80">
-                    Camera Status
+                  <p className="text-[10px] font-bold tracking-widest text-white/70 uppercase">
+                    Presence Camera
                   </p>
-                  <p className="text-sm font-bold text-white italic">
-                    {webcamError ? "Voice-only practice active..." : "Live camera self-view active for practice presence"}
+                  <p className="text-xs font-semibold text-white/90">
+                    {cameraActive ? "Live Preview" : "Voice / Text Mode"}
                   </p>
                 </div>
               </div>
             </div>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              type="button"
+              className="absolute right-3 top-3 h-7 bg-black/40 text-[11px] font-semibold text-white/90 backdrop-blur-md hover:bg-black/60"
+              onClick={() => {
+                if (webcamEnabled) {
+                  if (videoStreamRef.current) {
+                    videoStreamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+                    videoStreamRef.current = null;
+                  }
+                  setWebcamEnabled(false);
+                } else {
+                  setWebcamError(null);
+                  setWebcamEnabled(true);
+                }
+              }}
+            >
+              {cameraActive ? "Turn Off" : "Turn On"}
+            </Button>
           </div>
 
-          <Card className="border-none bg-slate-50 dark:bg-slate-900">
-            <CardContent className="p-8 text-center space-y-6">
-              <RecordAnswer
-                interviewId={interview._id}
-                activeQuestion={questions[activeQuestionIndex]}
-                onSaved={(question) =>
-                  setAnswered((prev) => new Set(prev).add(question))
-                }
-              />
-            </CardContent>
-          </Card>
+          <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
+            <VideoOff className="h-3.5 w-3.5" />
+            Self-monitoring only — no video is recorded or uploaded.
+          </p>
         </div>
       </div>
     </div>

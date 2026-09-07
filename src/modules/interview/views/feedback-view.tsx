@@ -6,13 +6,15 @@ import {
   CheckCircle2,
   TrendingUp,
   MessageSquare,
-  Star,
   Home,
   ArrowRight,
   AlertCircle,
   Printer,
   Sparkles,
   Loader2,
+  Code2,
+  MessagesSquare,
+  Network,
 } from "lucide-react";
 import {
   Accordion,
@@ -40,6 +42,7 @@ interface FeedbackItem {
 
 interface FeedbackViewProps {
   interviewId: string;
+  jobPosition?: string;
   initialFeedback?: FeedbackItem[];
   initialOverallRating?: number;
   initialError?: string | null;
@@ -47,8 +50,19 @@ interface FeedbackViewProps {
   isDemo?: boolean;
 }
 
+function scoreTone(score: number) {
+  if (score >= 8)
+    return "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20";
+  if (score >= 6)
+    return "text-primary bg-primary/10 border-primary/20";
+  if (score >= 4)
+    return "text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/20";
+  return "text-rose-600 dark:text-rose-400 bg-rose-500/10 border-rose-500/20";
+}
+
 export const FeedbackView = ({
   interviewId,
+  jobPosition,
   initialFeedback = [],
   initialOverallRating = 0,
   initialError = null,
@@ -59,6 +73,20 @@ export const FeedbackView = ({
   const [evaluating, setEvaluating] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
   const [overallRating, setOverallRating] = useState(initialOverallRating);
+
+  const rubricAvg = (key: "technicalAccuracy" | "communication" | "architectureTradeoffs") => {
+    const items = feedback.filter((f) => typeof f[key] === "number");
+    if (!items.length) return null;
+    return Math.round(
+      items.reduce((acc, f) => acc + (f[key] as number), 0) / items.length
+    );
+  };
+
+  const rubrics = [
+    { key: "technicalAccuracy" as const, label: "Technical Accuracy", icon: Code2 },
+    { key: "communication" as const, label: "Communication (STAR)", icon: MessagesSquare },
+    { key: "architectureTradeoffs" as const, label: "Architecture & Trade-offs", icon: Network },
+  ];
 
   const handleManualEvaluate = async () => {
     setEvaluating(true);
@@ -74,7 +102,7 @@ export const FeedbackView = ({
         setOverallRating(
           typeof result.overallRating === "number"
             ? result.overallRating
-          : Math.round(total / result.feedback.length)
+            : Math.round(total / result.feedback.length)
         );
       } else {
         setError(result.error || "No feedback is available for this interview.");
@@ -89,15 +117,19 @@ export const FeedbackView = ({
 
   if (evaluating) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-6 px-4">
         <div className="relative">
-          <div className="h-24 w-24 rounded-full border-4 border-primary/20" />
-          <div className="absolute inset-0 h-24 w-24 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+          <div className="h-20 w-20 rounded-full border-4 border-primary/15" />
+          <div className="absolute inset-0 h-20 w-20 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <BrainIcon />
         </div>
-        <div className="text-center space-y-2">
-          <h3 className="text-2xl font-bold">Generating AI Feedback...</h3>
-          <p className="text-muted-foreground italic">
-            Gemini is analyzing your answers and performance.
+        <div className="space-y-2 text-center">
+          <h3 className="text-xl font-bold text-foreground">
+            Generating AI Feedback...
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Gemini is analyzing your answers across technical accuracy,
+            communication, and architecture.
           </p>
         </div>
       </div>
@@ -118,20 +150,20 @@ export const FeedbackView = ({
             "This interview has not been evaluated yet. Complete the interview to generate your AI feedback."}
         </p>
         <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-          <Button variant="outline" className="h-12 px-6 font-bold" asChild>
+          <Button variant="outline" className="h-12 px-6 font-semibold" asChild>
             <Link href="/dashboard">
               <Home className="mr-2 h-5 w-5" /> Back to Dashboard
             </Link>
           </Button>
           {!isCompleted ? (
-            <Button className="h-12 px-6 font-bold" asChild>
+            <Button className="h-12 px-6 font-semibold" asChild>
               <Link href={`/interview/${interviewId}/start`}>
                 Resume Interview <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
           ) : (
             <Button
-              className="h-12 px-6 font-bold"
+              className="h-12 px-6 font-semibold"
               onClick={handleManualEvaluate}
               disabled={evaluating}
             >
@@ -151,184 +183,213 @@ export const FeedbackView = ({
   }
 
   return (
-    <div className="container mx-auto px-4 py-8 md:py-12 max-w-5xl">
+    <div className="relative mx-auto w-full max-w-5xl px-4 py-10 md:py-14">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-80 bg-linear-to-b from-primary/8 to-transparent blur-2xl"
+      />
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: "easeOut" }}
         className="space-y-10"
       >
         {isDemo && (
-          <div className="p-5 rounded-3xl bg-primary/10 border border-primary/20 flex flex-col sm:flex-row items-center justify-between gap-4 no-print shadow-lg shadow-primary/5">
+          <div className="no-print flex flex-col items-center justify-between gap-4 rounded-2xl border border-primary/20 bg-primary/5 p-5 shadow-sm sm:flex-row">
             <div className="flex items-center gap-4">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-md">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary text-white shadow-md shadow-primary/25">
                 <Sparkles className="h-6 w-6" />
               </div>
               <div>
-                <p className="font-bold text-foreground text-base">Recruiter Showcase Demo</p>
-                <p className="text-xs sm:text-sm text-muted-foreground">
+                <p className="text-base font-bold text-foreground">Recruiter Showcase Demo</p>
+                <p className="text-xs text-muted-foreground sm:text-sm">
                   Interactive evaluation report for a Senior Full-Stack Engineer session. No login or mic required to test!
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" asChild className="rounded-xl font-bold">
+              <Button size="sm" variant="outline" asChild className="font-semibold">
                 <Link href="/">Back to Home</Link>
               </Button>
-              <Button size="sm" asChild className="rounded-xl font-bold shadow-md shadow-primary/20">
+              <Button size="sm" asChild className="font-semibold shadow-md shadow-primary/20">
                 <Link href="/sign-up">Sign Up Free</Link>
               </Button>
             </div>
           </div>
         )}
 
-        {/* Congratulations Header */}
-        <div className="text-center space-y-4">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500 shadow-lg shadow-emerald-500/20">
-            <Trophy className="h-8 w-8 text-white" />
-          </div>
-          <h1 className="text-4xl font-extrabold tracking-tight text-foreground sm:text-5xl">
-            Congratulations!
-          </h1>
-          <p className="text-lg text-muted-foreground mx-auto max-w-2xl">
-            You have successfully completed your mock interview. Here is your
-            AI-driven performance review.
+        {/* Report Header */}
+        <div className="space-y-5 text-center">
+          <p className="text-xs font-semibold tracking-widest text-primary uppercase">
+            Performance Report
           </p>
-          <div className="pt-2 no-print">
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground sm:text-4xl">
+            {jobPosition ? `${jobPosition} Interview` : "Interview"} Results
+          </h1>
+          <p className="mx-auto max-w-xl text-muted-foreground">
+            You completed all questions. Here is your AI-driven evaluation with
+            per-question scoring and improvement notes.
+          </p>
+
+          <div className="no-print flex justify-center pt-1">
             <Button
               variant="outline"
               size="sm"
               onClick={() => window.print()}
-              className="h-10 px-5 font-bold rounded-xl border-primary/20 hover:bg-primary/5 shadow-xs"
+              className="h-9 border-primary/20 px-4 font-semibold hover:bg-primary/5"
             >
-              <Printer className="mr-2 h-4 w-4 text-primary" /> Export Evaluation (PDF)
+              <Printer className="mr-2 h-4 w-4 text-primary" /> Export as PDF
             </Button>
           </div>
         </div>
 
-        {/* Score Overview */}
-        <div className="grid gap-6 md:grid-cols-3">
-          <Card className="border-none bg-primary/5 ring-1 ring-primary/10 shadow-none">
-            <CardContent className="pt-6 text-center">
-              <TrendingUp className="mx-auto h-8 w-8 text-primary mb-3" />
-              <h4 className="text-sm font-bold uppercase tracking-widest text-muted-foreground">
-                Overall Rating
-              </h4>
-              <p className="text-5xl font-black mt-2 text-primary">
+        {/* Score Dashboard */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="border border-border/70 bg-linear-to-b from-primary/8 to-transparent shadow-sm">
+            <CardContent className="p-6 text-center">
+              <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary text-white shadow-md shadow-primary/25">
+                <Trophy className="h-5 w-5" />
+              </div>
+              <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+                Overall Score
+              </p>
+              <p className="mt-1.5 text-4xl font-black text-foreground">
                 {overallRating}
-                <span className="text-2xl font-normal opacity-50">/10</span>
+                <span className="text-xl font-normal text-muted-foreground">/10</span>
               </p>
             </CardContent>
           </Card>
-          <Card className="border-none bg-emerald-500/5 ring-1 ring-emerald-500/10 shadow-none col-span-2">
-            <CardContent className="pt-6 flex flex-col justify-center h-full">
-              <div className="flex items-center gap-4">
-                <div className="h-12 w-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-                  <CheckCircle2 className="h-6 w-6" />
-                </div>
-                <div>
-                  <h4 className="font-bold text-foreground">
-                    Completed Session
-                  </h4>
-                  <p className="text-sm text-muted-foreground">
-                    Your responses have been validated against industry
-                    standards.
-                  </p>
-                </div>
+
+          <Card className="border border-border/70 bg-card/60 shadow-sm">
+            <CardContent className="p-6">
+              <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500">
+                <CheckCircle2 className="h-5 w-5" />
               </div>
+              <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+                Questions
+              </p>
+              <p className="mt-1.5 text-3xl font-black text-foreground">
+                {feedback.length}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">Evaluated by Gemini</p>
             </CardContent>
           </Card>
+
+          {rubrics.map(({ key, label, icon: Icon }) => {
+            const avg = rubricAvg(key);
+            return (
+              <Card key={key} className="border border-border/70 bg-card/60 shadow-sm">
+                <CardContent className="p-6">
+                  <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <Icon className="h-5 w-5" />
+                  </div>
+                  <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
+                    {label}
+                  </p>
+                  <p className="mt-1.5 text-3xl font-black text-foreground">
+                    {avg ?? "—"}
+                    {avg !== null && (
+                      <span className="text-base font-normal text-muted-foreground">/10</span>
+                    )}
+                  </p>
+                  {avg !== null && (
+                    <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-border">
+                      <motion.div
+                        className="h-full rounded-full bg-linear-to-r from-primary to-secondary"
+                        initial={{ width: 0 }}
+                        animate={{ width: `${avg * 10}%` }}
+                        transition={{ duration: 0.7, ease: "easeOut", delay: 0.2 }}
+                      />
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
 
-        {/* Feedback Accordion */}
-        <div className="space-y-6">
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <MessageSquare className="h-6 w-6 text-primary" />
-            Question-wise Analysis
-          </h2>
+        {/* Question-wise Analysis */}
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-xl font-bold text-foreground">
+              <MessageSquare className="h-5 w-5 text-primary" />
+              Question-wise Analysis
+            </h2>
+            <span className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
+              <TrendingUp className="h-3.5 w-3.5" />
+              Composite score is the average of the three rubric dimensions
+            </span>
+          </div>
 
           <Accordion
             type="single"
             collapsible
-            className="w-full space-y-4 border-none"
+            className="w-full space-y-3.5"
           >
             {feedback.map((item, index) => (
               <AccordionItem
                 key={index}
                 value={`item-${index}`}
-                className="border-none bg-background/50 rounded-2xl overflow-hidden shadow-sm ring-1 ring-slate-200 dark:ring-slate-800"
+                className="print-avoid-break overflow-hidden rounded-2xl border border-border/70 bg-card/60 shadow-sm"
               >
-                <AccordionTrigger className="px-6 py-5 hover:no-underline hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="flex items-center gap-4 text-left">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-white font-bold text-sm">
+                <AccordionTrigger className="px-5 py-4 hover:bg-muted/40 hover:no-underline sm:px-6">
+                  <div className="flex items-center gap-3 text-left">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary/10 font-bold text-primary text-sm">
                       {index + 1}
                     </span>
-                    <span className="font-semibold text-lg line-clamp-1">
+                    <span className="line-clamp-1 font-semibold text-foreground">
                       {item.question}
                     </span>
+                    <Badge
+                      variant="outline"
+                      className={`ml-auto hidden shrink-0 border font-bold sm:inline-flex ${scoreTone(item.rating)}`}
+                    >
+                      {item.rating}/10
+                    </Badge>
                   </div>
                 </AccordionTrigger>
-                <AccordionContent className="px-6 pb-6 pt-2 space-y-6">
-                  <div className="grid gap-6 md:grid-cols-2">
-                    <div className="space-y-3">
-                      <h5 className="text-sm font-bold flex items-center gap-2 text-rose-500 uppercase">
+                <AccordionContent className="space-y-5 px-5 pb-6 pt-1 sm:px-6">
+                  {/* Rubric chips */}
+                  <div className="grid grid-cols-3 gap-2.5">
+                    {rubrics.map(({ key, label }) => (
+                      <div
+                        key={key}
+                        className={`flex items-center justify-between rounded-xl border px-3 py-2 text-xs font-medium sm:flex-col sm:items-start sm:gap-0.5 ${scoreTone(item[key] ?? item.rating)}`}
+                      >
+                        <span className="opacity-80">{label.replace(" (STAR)", "")}</span>
+                        <span className="font-bold">{item[key] ?? item.rating}/10</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold tracking-widest text-rose-500 uppercase">
                         Your Answer
-                      </h5>
-                      <div className="p-4 rounded-xl bg-rose-500/5 border border-rose-500/10 italic text-muted-foreground whitespace-pre-wrap">
-                        &quot;{item.answer}&quot;
+                      </p>
+                      <div className="whitespace-pre-wrap rounded-xl border border-rose-500/15 bg-rose-500/5 p-4 text-sm leading-relaxed text-muted-foreground">
+                        {item.answer}
                       </div>
                     </div>
-                    <div className="space-y-3">
-                      <h5 className="text-sm font-bold flex items-center gap-2 text-emerald-500 uppercase">
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold tracking-widest text-emerald-500 uppercase">
                         Ideal Answer
-                      </h5>
-                      <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10 text-foreground whitespace-pre-wrap">
+                      </p>
+                      <div className="whitespace-pre-wrap rounded-xl border border-emerald-500/15 bg-emerald-500/5 p-4 text-sm leading-relaxed text-foreground">
                         {item.idealAnswer}
                       </div>
                     </div>
                   </div>
 
-                  <div className="p-5 rounded-2xl bg-amber-500/5 ring-1 ring-amber-500/20 space-y-3">
-                    <div className="flex gap-4">
-                      <Star className="h-6 w-6 text-amber-500 shrink-0" />
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-bold text-amber-600 uppercase text-xs tracking-widest">
-                            Feedback & Evaluation
-                          </span>
-                          <Badge
-                            variant="outline"
-                            className="text-xs font-bold bg-amber-100 dark:bg-amber-900/40 border-amber-200 text-amber-700 dark:text-amber-300"
-                          >
-                            Composite Score: {item.rating}/10
-                          </Badge>
-                        </div>
-                        <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap pt-1">
-                          {item.feedback}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Multi-Dimensional Rubric Breakdown */}
-                    <div className="pt-3 border-t border-amber-500/10 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                      <div className="flex items-center justify-between rounded-xl bg-background/80 px-3 py-2 text-xs ring-1 ring-slate-200/60 dark:ring-slate-800">
-                        <span className="text-muted-foreground font-medium">Technical Accuracy</span>
-                        <span className="font-bold text-primary">
-                          {item.technicalAccuracy ?? item.rating}/10
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between rounded-xl bg-background/80 px-3 py-2 text-xs ring-1 ring-slate-200/60 dark:ring-slate-800">
-                        <span className="text-muted-foreground font-medium">Communication (STAR)</span>
-                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                          {item.communication ?? item.rating}/10
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between rounded-xl bg-background/80 px-3 py-2 text-xs ring-1 ring-slate-200/60 dark:ring-slate-800">
-                        <span className="text-muted-foreground font-medium">Architecture & Trade-offs</span>
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400">
-                          {item.architectureTradeoffs ?? item.rating}/10
-                        </span>
-                      </div>
-                    </div>
+                  <div className="space-y-3 rounded-xl border border-primary/15 bg-primary/5 p-4 sm:p-5">
+                    <p className="flex items-center gap-2 text-xs font-bold tracking-widest text-primary uppercase">
+                      <Sparkles className="h-4 w-4" />
+                      AI Feedback · Scored {item.rating}/10
+                    </p>
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                      {item.feedback}
+                    </p>
                   </div>
                 </AccordionContent>
               </AccordionItem>
@@ -337,24 +398,24 @@ export const FeedbackView = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-10 no-print action-buttons">
+        <div className="no-print action-buttons flex flex-col items-center justify-center gap-3 pt-4 sm:flex-row">
           <Button
             size="lg"
             variant="outline"
-            className="h-14 px-8 font-bold rounded-2xl"
+            className="h-12 px-7 font-semibold"
             asChild
           >
             <Link href="/dashboard">
-              <Home className="mr-2 h-5 w-5" /> Back to Dashboard
+              <Home className="mr-2 h-4 w-4" /> Back to Dashboard
             </Link>
           </Button>
           <Button
             size="lg"
-            className="h-14 px-8 font-bold rounded-2xl shadow-xl shadow-primary/20 bg-linear-to-r from-primary to-indigo-600"
+            className="h-12 bg-linear-to-r from-primary to-indigo-600 px-7 font-bold shadow-lg shadow-primary/25"
             asChild
           >
             <Link href="/dashboard">
-              Start Another Interview <ArrowRight className="ml-2 h-5 w-5" />
+              Start Another Interview <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>
         </div>
@@ -362,3 +423,11 @@ export const FeedbackView = ({
     </div>
   );
 };
+
+function BrainIcon() {
+  return (
+    <div className="absolute inset-0 flex items-center justify-center">
+      <Sparkles className="h-7 w-7 text-primary" />
+    </div>
+  );
+}

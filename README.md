@@ -216,7 +216,7 @@ try {
 | **Styling** | Tailwind CSS 4.0, Framer Motion | Modern dark/light interface, micro-animations |
 | **Authentication** | Clerk Auth | Session tokens, route protection, user management |
 | **Database** | MongoDB Atlas, Mongoose 9.1 | Document storage, atomic operators, compound indexes |
-| **AI Orchestration**| Google Generative AI (`gemini-3-flash`) | Structured JSON generation & answer evaluation |
+| **AI Orchestration**| Google Generative AI (`gemini-2.5-flash`) | Structured JSON generation & answer evaluation |
 | **Payments** | Stripe SDK | Checkout sessions, webhook fulfillment |
 | **Audio/Voice** | Web Speech API (`react-speech-recognition`) | In-browser live speech-to-text |
 
@@ -241,6 +241,7 @@ NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 
 MONGODB_URI=mongodb+srv://<username>:<password>@cluster.mongodb.net/mockmate
 GEMINI_API_KEY=AIzaSy...
+GEMINI_MODEL=gemini-2.5-flash # Optional, defaults to gemini-2.5-flash
 
 STRIPE_SECRET_KEY=sk_test_...
 STRIPE_WEBHOOK_SECRET=whsec_...

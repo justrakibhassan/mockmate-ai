@@ -11,9 +11,12 @@ import {
   ArrowRight,
   ShieldCheck,
   AlertCircle,
+  Mic,
+  FileText,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 
@@ -23,184 +26,227 @@ interface InterviewRoomViewProps {
     jobPosition: string;
     jobDesc: string;
     jobExperience: string;
+    questions?: string[];
   };
 }
+
+const fadeUp = {
+  initial: { opacity: 0, y: 16 },
+  animate: { opacity: 1, y: 0 },
+};
 
 export const InterviewRoomView = ({ interview }: InterviewRoomViewProps) => {
   const [webcamEnabled, setWebcamEnabled] = useState(false);
 
+  const questionCount = interview.questions?.length ?? 5;
+
   return (
-    <div className="container mx-auto px-4 py-8 md:py-12">
-      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    <div className="relative mx-auto w-full max-w-6xl px-4 py-10 md:py-16">
+      {/* Subtle backdrop accent */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-72 bg-linear-to-b from-primary/8 to-transparent blur-2xl"
+      />
+
+      {/* Header */}
+      <motion.div
+        {...fadeUp}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className="mb-10 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center"
+      >
         <div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            Interview <span className="text-primary italic">Preparation</span>
+          <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold tracking-widest text-primary uppercase">
+            <BrainCircuit className="h-4 w-4" />
+            Pre-Interview Check
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
+            {interview.jobPosition} Session
           </h1>
-          <p className="mt-2 text-muted-foreground">
-            Review the job details and ensure your camera is set up correctly.
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
+            Review the brief, set up your camera, and enter the room when you
+            are ready.
           </p>
         </div>
         <Badge
           variant="outline"
-          className="w-fit border-primary/20 bg-primary/5 px-4 py-1 text-primary"
+          className="shrink-0 border-border bg-background px-3 py-1 font-mono text-xs text-muted-foreground"
         >
-          ID: {interview._id.slice(-6).toUpperCase()}
+          #{interview._id.slice(-6).toUpperCase()}
         </Badge>
-      </div>
+      </motion.div>
 
-      <div className="grid gap-8 lg:grid-cols-2">
-        {/* Left Panel: Job Details */}
+      <div className="grid gap-6 lg:grid-cols-5 lg:items-start">
+        {/* Left: Brief + Checklist */}
         <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5 }}
-          className="space-y-6"
+          {...fadeUp}
+          transition={{ duration: 0.4, delay: 0.08, ease: "easeOut" }}
+          className="space-y-5 lg:col-span-3"
         >
-          <Card className="border-none bg-background/50 shadow-lg backdrop-blur-sm">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-2xl">
-                <BrainCircuit className="h-6 w-6 text-primary" />
-                Job Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <Card className="border border-border/70 bg-card/60 shadow-sm">
+            <CardContent className="space-y-6 p-6 sm:p-8">
               <div>
-                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
                   Position
-                </h4>
-                <p className="text-lg font-medium text-foreground">
+                </p>
+                <p className="mt-1.5 text-lg font-semibold text-foreground">
                   {interview.jobPosition}
                 </p>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                    Experience
-                  </h4>
-                  <p className="font-medium">{interview.jobExperience} Years</p>
+                <div className="rounded-xl border border-border/70 bg-background/50 p-4">
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <Clock className="h-3.5 w-3.5" /> Experience
+                  </p>
+                  <p className="mt-1.5 font-semibold text-foreground">
+                    {interview.jobExperience} {interview.jobExperience === "1" ? "Year" : "Years"}
+                  </p>
                 </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                    Status
-                  </h4>
-                  <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 border-none">
-                    Active
-                  </Badge>
+                <div className="rounded-xl border border-border/70 bg-background/50 p-4">
+                  <p className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <FileText className="h-3.5 w-3.5" /> Questions
+                  </p>
+                  <p className="mt-1.5 font-semibold text-foreground">
+                    {questionCount} Tailored by AI
+                  </p>
                 </div>
               </div>
+
               <div>
-                <h4 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
+                <p className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
                   Job Description
-                </h4>
-                <p className="mt-1 text-sm leading-relaxed text-muted-foreground italic">
-                  &quot;{interview.jobDesc}&quot;
+                </p>
+                <p className="mt-2 rounded-xl border border-border/70 bg-background/50 p-4 text-sm leading-relaxed text-muted-foreground">
+                  {interview.jobDesc}
                 </p>
               </div>
             </CardContent>
           </Card>
 
-          <Card className="border-none bg-primary/5 shadow-none ring-1 ring-primary/10">
-            <CardContent className="p-6">
-              <div className="flex gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                  <Info className="h-5 w-5" />
-                </div>
-                <div className="space-y-1">
-                  <h4 className="font-bold text-foreground">
-                    Important Instructions
-                  </h4>
-                  <ul className="text-sm text-muted-foreground space-y-2">
-                    <li className="flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                      Ensure you are in a quiet, well-lit environment.
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <ShieldCheck className="h-4 w-4 text-emerald-500" />
-                      Camera stays private in your browser for self-monitoring. No video is recorded or sent to servers.
-                    </li>
-                    <li className="flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 text-amber-500" />
-                      Don&apos;t refresh the page during the interview.
-                    </li>
-                  </ul>
-                </div>
-              </div>
+          {/* Checklist */}
+          <Card className="border border-border/70 bg-card/60 shadow-sm">
+            <CardContent className="p-6 sm:p-8">
+              <p className="mb-5 flex items-center gap-2 text-sm font-semibold text-foreground">
+                <Info className="h-4 w-4 text-primary" />
+                Before you begin
+              </p>
+              <ul className="space-y-3.5 text-sm text-muted-foreground">
+                <li className="flex items-start gap-3">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                  Find a quiet spot — answers are captured via voice or typing.
+                </li>
+                <li className="flex items-start gap-3">
+                  <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-emerald-500" />
+                  The camera preview stays in your browser. Nothing is recorded
+                  or uploaded.
+                </li>
+                <li className="flex items-start gap-3">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+                  Avoid refreshing mid-session — your progress is saved per
+                  question.
+                </li>
+              </ul>
             </CardContent>
           </Card>
         </motion.div>
 
-        {/* Right Panel: Webcam Setup */}
+        {/* Right: Camera card */}
         <motion.div
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="flex flex-col gap-6"
+          {...fadeUp}
+          transition={{ duration: 0.4, delay: 0.16, ease: "easeOut" }}
+          className="space-y-4 lg:col-span-2 lg:sticky lg:top-6"
         >
-          <div className="relative aspect-video overflow-hidden rounded-3xl bg-slate-900 shadow-2xl ring-1 ring-white/10">
+          <div className="relative aspect-video overflow-hidden rounded-2xl border border-border/70 bg-slate-950 shadow-lg">
             {webcamEnabled ? (
               <Webcam
-                onUserMedia={() => console.log("Webcam ready")}
                 mirrored={true}
-                className="h-full w-full object-cover"
+                className="h-full w-full object-cover opacity-90"
+                onUserMedia={() => setWebcamEnabled(true)}
               />
             ) : (
-              <div className="flex h-full w-full flex-col items-center justify-center gap-4 text-slate-400">
-                <div className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-800/50">
-                  <VideoOff className="h-10 w-10" />
+              <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5">
+                  <VideoOff className="h-6 w-6 text-slate-500" />
                 </div>
-                <p className="text-sm font-medium">
-                  Camera is currently disabled
-                </p>
+                <div>
+                  <p className="text-sm font-semibold text-slate-300">
+                    Camera is off
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    You can continue in voice-only mode
+                  </p>
+                </div>
               </div>
             )}
 
-            {/* Status Overlays */}
-            <div className="absolute left-6 top-6 flex items-center gap-2">
-              <div
-                className={`h-3 w-3 rounded-full animate-pulse ${
-                  webcamEnabled ? "bg-emerald-500" : "bg-rose-500"
+            <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full bg-black/50 px-3 py-1 backdrop-blur-md">
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  webcamEnabled ? "animate-pulse bg-emerald-400" : "bg-slate-500"
                 }`}
               />
-              <span className="text-xs font-bold uppercase tracking-widest text-white/80">
-                {webcamEnabled ? "Live Preview" : "Offline"}
+              <span className="text-[10px] font-bold tracking-widest text-white/90 uppercase">
+                {webcamEnabled ? "Live" : "Offline"}
               </span>
             </div>
           </div>
 
-          <div className="flex flex-col gap-4">
-            <Button
-              variant={webcamEnabled ? "outline" : "default"}
-              size="lg"
-              className="h-14 font-bold transition-all"
-              onClick={() => setWebcamEnabled(!webcamEnabled)}
-            >
-              {webcamEnabled ? (
-                <>
-                  <VideoOff className="mr-2 h-5 w-5" /> Disable Camera
-                </>
-              ) : (
-                <>
-                  <Video className="mr-2 h-5 w-5" /> Enable Camera
-                </>
-              )}
-            </Button>
+          <Button
+            variant={webcamEnabled ? "outline" : "default"}
+            className="h-11 w-full font-semibold"
+            onClick={() => setWebcamEnabled(!webcamEnabled)}
+          >
+            {webcamEnabled ? (
+              <>
+                <VideoOff className="mr-2 h-4 w-4" /> Turn Camera Off
+              </>
+            ) : (
+              <>
+                <Video className="mr-2 h-4 w-4" /> Enable Camera
+              </>
+            )}
+          </Button>
 
-            <div className="space-y-2">
-              <Link href={`/interview/${interview._id}/start`}>
-                <Button className="h-16 w-full text-xl font-extrabold shadow-xl shadow-primary/20 bg-linear-to-r from-primary to-indigo-600 hover:scale-[1.02] active:scale-[0.98] transition-all">
-                  Start My Mock Interview{" "}
-                  <ArrowRight className="ml-2 h-6 w-6" />
-                </Button>
-              </Link>
-              {!webcamEnabled && (
-                <p className="text-center text-xs font-semibold text-amber-600 dark:text-amber-500 animate-pulse">
-                  ⚠️ Camera is disabled. You will proceed in Voice-Only practice mode.
-                </p>
-              )}
-            </div>
-          </div>
+          <Button
+            asChild
+            className="h-13 w-full bg-linear-to-r from-primary to-indigo-600 py-3.5 text-base font-bold shadow-lg shadow-primary/25 transition-transform hover:scale-[1.01] active:scale-[0.99]"
+          >
+            <Link href={`/interview/${interview._id}/start`}>
+              <Mic className="mr-2 h-5 w-5" />
+              Enter Interview Room
+            </Link>
+          </Button>
+
+          {!webcamEnabled && (
+            <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
+              <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+              Voice-only mode — camera stays private either way.
+            </p>
+          )}
         </motion.div>
       </div>
+
+      {/* Bottom CTA strip */}
+      <motion.div
+        {...fadeUp}
+        transition={{ duration: 0.4, delay: 0.24, ease: "easeOut" }}
+        className="mt-10 hidden items-center justify-between rounded-2xl border border-border/70 bg-card/60 px-6 py-5 shadow-sm lg:flex"
+      >
+        <p className="flex items-center gap-3 text-sm text-muted-foreground">
+          <ArrowRight className="h-4 w-4 shrink-0 text-primary" />
+          <span>
+            Roughly <strong className="text-foreground">15–20 minutes</strong>{" "}
+            for a full session. Take it at your own pace.
+          </span>
+        </p>
+        <Button
+          asChild
+          variant="ghost"
+          className="font-semibold text-primary hover:bg-primary/5"
+        >
+          <Link href="/dashboard">Back to Dashboard</Link>
+        </Button>
+      </motion.div>
     </div>
   );
 };

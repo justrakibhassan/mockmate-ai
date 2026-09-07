@@ -26,6 +26,7 @@ export default async function FeedbackPage({ params }: FeedbackPageProps) {
     <div className="min-h-screen bg-background">
       <FeedbackView
         interviewId={interviewId}
+        jobPosition={interview?.jobPosition}
         initialFeedback={feedback}
         initialOverallRating={overallRating}
         initialError={

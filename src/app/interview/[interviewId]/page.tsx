@@ -19,9 +19,17 @@ export default async function InterviewPage({ params }: InterviewPageProps) {
     return notFound();
   }
 
+  const interview = result.interview as {
+    _id: string;
+    jobPosition: string;
+    jobDesc: string;
+    jobExperience: string;
+    questions?: string[];
+  };
+
   return (
     <div className="min-h-screen bg-background">
-      <InterviewRoomView interview={result.interview} />
+      <InterviewRoomView interview={interview} />
     </div>
   );
 }

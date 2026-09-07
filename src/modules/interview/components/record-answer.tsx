@@ -5,7 +5,7 @@ import React, { useEffect, useState } from "react";
 import SpeechRecognition, {
   useSpeechRecognition,
 } from "react-speech-recognition";
-import { Mic, Square, Loader2, Save, CheckCircle2, AlertCircle, Edit3 } from "lucide-react";
+import { Mic, Square, Loader2, Save, CheckCircle2, AlertCircle, PenLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
@@ -90,53 +90,61 @@ export const RecordAnswer = ({
   const isVoiceSupported = browserSupportsSpeechRecognition;
 
   return (
-    <div className="flex flex-col items-center gap-6">
+    <div className="flex flex-col items-center gap-5">
       {/* Microphone Record Button (if voice supported) */}
       {isVoiceSupported ? (
-        <div className="flex h-24 w-24 items-center justify-center rounded-full bg-primary/10 text-primary relative">
-          {listening && (
-            <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
-          )}
-          <Button
-            size="icon"
-            variant="ghost"
-            className={`h-16 w-16 rounded-full transition-all ${
-              listening
-                ? "bg-primary text-white scale-110 shadow-lg shadow-primary/30"
-                : "bg-background hover:bg-primary/5 shadow-md"
-            }`}
-            onClick={
-              listening
-                ? () => SpeechRecognition.stopListening()
-                : () => {
-                    setManualEdit(false);
-                    SpeechRecognition.startListening({ continuous: true });
-                  }
-            }
-            aria-label={listening ? "Stop recording" : "Start recording"}
-          >
-            {listening ? (
-              <Square className="h-7 w-7" />
-            ) : (
-              <Mic className="h-7 w-7" />
+        <div className="flex flex-col items-center gap-3">
+          <div className="relative flex h-20 w-20 items-center justify-center">
+            {listening && (
+              <>
+                <span className="absolute inset-0 animate-ping rounded-full bg-primary/15" />
+                <span className="absolute inset-2 animate-ping rounded-full bg-primary/10 [animation-delay:150ms]" />
+              </>
             )}
-          </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              aria-label={listening ? "Stop recording" : "Start recording"}
+              className={`h-16 w-16 rounded-full border transition-all duration-300 ${
+                listening
+                  ? "border-primary/40 bg-primary text-white shadow-lg shadow-primary/30"
+                  : "border-border/70 bg-background hover:bg-primary/5 hover:text-primary shadow-sm"
+              }`}
+              onClick={
+                listening
+                  ? () => SpeechRecognition.stopListening()
+                  : () => {
+                      setManualEdit(false);
+                      SpeechRecognition.startListening({ continuous: true });
+                    }
+              }
+            >
+              {listening ? (
+                <Square className="h-6 w-6" />
+              ) : (
+                <Mic className="h-7 w-7" />
+              )}
+            </Button>
+          </div>
+          <p className="text-xs font-medium text-muted-foreground">
+            {listening ? "Listening — speak clearly" : "Tap to answer by voice"}
+          </p>
         </div>
       ) : (
-        <div className="flex items-center gap-2 text-xs text-amber-600 dark:text-amber-400 bg-amber-500/10 px-3 py-1.5 rounded-full border border-amber-500/20">
-          <AlertCircle className="h-4 w-4" />
-          Voice input not supported in this browser. You can type your answer below.
+        <div className="flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-4 py-2 text-xs text-amber-600 dark:text-amber-400">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          Voice input not supported in this browser. Type your answer below.
         </div>
       )}
 
       {/* Answer Input Area (Supports Speech + Manual Edit) */}
-      <div className="w-full space-y-4 text-left">
-        <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
-          <span className="flex items-center gap-1 font-medium">
-            <Edit3 className="h-3.5 w-3.5 text-primary" />
+      <div className="w-full space-y-3 text-left">
+        <div className="flex items-center justify-between px-1 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1.5 font-medium">
+            <PenLine className="h-3.5 w-3.5 text-primary" />
             {listening ? "Transcribing speech live..." : "Your Answer"}
           </span>
-          <span>{answerText.length} characters</span>
+          <span className="tabular-nums">{answerText.length} chars</span>
         </div>
 
         <Textarea
@@ -151,33 +159,38 @@ export const RecordAnswer = ({
               ? "Click the microphone above and speak, or type your answer directly here..."
               : "Type your answer here..."
           }
-          className="min-h-[120px] max-h-[220px] rounded-xl bg-slate-50 dark:bg-slate-900 border text-sm leading-relaxed p-4"
+          className="min-h-[130px] rounded-xl border-border/70 bg-background/60 p-4 text-sm leading-relaxed"
         />
 
         {isSaved && (
-          <div className="flex items-center gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-3 py-2 rounded-lg border border-emerald-500/20">
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-2.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
-            Answer saved. You can proceed to the next question or revise and save again.
+            Answer saved. You can proceed to the next question or revise and
+            save again.
           </div>
         )}
 
         <Button
-          className="w-full h-12 font-bold shadow-md shadow-primary/10 transition-all hover:scale-[1.01]"
+          className="h-11 w-full font-semibold shadow-md shadow-primary/10 transition-transform hover:scale-[1.005]"
           disabled={saving || listening || answerText.trim().length < 10}
           onClick={onSaveAnswer}
         >
           {saving ? (
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           ) : isSaved ? (
-            <CheckCircle2 className="mr-2 h-5 w-5 text-emerald-400" />
+            <CheckCircle2 className="mr-2 h-4 w-4 text-emerald-400" />
           ) : (
-            <Save className="mr-2 h-5 w-5" />
+            <Save className="mr-2 h-4 w-4" />
           )}
-          {saving ? "Saving Answer..." : isSaved ? "Update Saved Answer" : "Save Answer"}
+          {saving
+            ? "Saving Answer..."
+            : isSaved
+              ? "Update Saved Answer"
+              : "Save Answer"}
         </Button>
 
         {listening && (
-          <p className="text-center text-xs text-muted-foreground animate-pulse">
+          <p className="animate-pulse text-center text-xs text-muted-foreground">
             Recording in progress. Click the square icon to stop before saving.
           </p>
         )}
