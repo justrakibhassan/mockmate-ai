@@ -19,6 +19,10 @@ export interface IInterview extends Document {
   }[];
   status: "pending" | "completed";
   overallRating?: number;
+  executiveSummary?: string;
+  hiringVerdict?: "STRONG HIRE" | "HIRE" | "LEAN HIRE" | "NEEDS PRACTICE";
+  keyStrengths?: string[];
+  keyImprovements?: string[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -49,6 +53,13 @@ const InterviewSchema: Schema = new Schema(
       default: "pending",
     },
     overallRating: { type: Number },
+    executiveSummary: { type: String },
+    hiringVerdict: {
+      type: String,
+      enum: ["STRONG HIRE", "HIRE", "LEAN HIRE", "NEEDS PRACTICE"],
+    },
+    keyStrengths: { type: [String], default: [] },
+    keyImprovements: { type: [String], default: [] },
   },
   { timestamps: true }
 );

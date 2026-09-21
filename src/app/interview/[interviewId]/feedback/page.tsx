@@ -33,6 +33,10 @@ export default async function FeedbackPage({ params }: FeedbackPageProps) {
           result.success ? null : result.error || "Interview not found"
         }
         isCompleted={isCompleted}
+        executiveSummary={interview?.executiveSummary}
+        hiringVerdict={interview?.hiringVerdict}
+        keyStrengths={interview?.keyStrengths}
+        keyImprovements={interview?.keyImprovements}
       />
     </div>
   );

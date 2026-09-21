@@ -70,10 +70,22 @@ export default function DemoPage() {
     <div className="min-h-screen bg-background">
       <FeedbackView
         interviewId="demo-senior-fullstack-session"
+        jobPosition="Senior Full-Stack Engineer"
         initialFeedback={DEMO_FEEDBACK}
         initialOverallRating={9}
         isCompleted={true}
         isDemo={true}
+        executiveSummary="Candidate demonstrated principal-level engineering depth in distributed systems, optimistic concurrency, and Next.js App Router internals. Consistently delivered precise, production-tested solutions with strong awareness of resilience and failure recovery."
+        hiringVerdict="STRONG HIRE"
+        keyStrengths={[
+          "Exceptional mastery of database-level atomic updates to eliminate distributed lock contention",
+          "Clear, structured STAR response methodology with quantifiable production metrics",
+          "Deep understanding of React Server Components bundle reduction and data streaming mechanics",
+        ]}
+        keyImprovements={[
+          "Could explore Redis Redlock edge cases under distributed network partitions",
+          "Discuss TTL background worker thread performance impact on high-scale replica sets",
+        ]}
       />
     </div>
   );

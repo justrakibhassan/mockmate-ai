@@ -92,15 +92,32 @@ export async function createInterview(data: {
     const jobExperience = String(rawExp);
 
     const randomSalt = Math.random().toString(36).substring(7);
-    const prompt = `Job Position: ${jobPosition}, Job Description: ${jobDesc}, Years of Experience: ${jobExperience}.
-    Create 5 highly specific and randomized technical interview questions. 
-    Seed: ${randomSalt}
-    
-    Guidelines:
-    1. EXTREME VARIETY: Do not use common or generic questions like "Tell me about yourself", "What is React?", "Hooks vs Classes", "Props vs State", or "Virtual DOM".
-    2. SITUATIONAL FOCUS: Use "What if" scenarios or "Tell me about a time" related to the specific job description and experience level.
-    3. NO REPETITION: Every question must be radically different from the others.
-    4. Provide the result strictly in JSON format as an array of objects, each with "question" and "answer" fields. Do not include any other text.`;
+    const prompt = `You are a Principal Technical Interviewer designing an authentic, high-signal technical interview for:
+Job Position: ${jobPosition}
+Job Description / Tech Stack: ${jobDesc}
+Candidate Experience: ${jobExperience} year(s)
+Randomization Seed: ${randomSalt}
+
+Create exactly 5 structured, realistic interview questions mapped to the following 5 evaluation stages:
+Stage 1: Architecture & System Thinking (high-level system design, modularity, or patterns relevant to this role)
+Stage 2: Technical Deep-Dive (in-depth language/framework mechanics, internals, concurrency, or data structures)
+Stage 3: Scalability, Caching & Performance (handling high throughput, query optimization, indexing, or memory limits)
+Stage 4: Edge Cases, Failure Modes & Debugging (dealing with network partitions, race conditions, or production incident triage)
+Stage 5: Trade-offs & Engineering Decision Making (analyzing architectural trade-offs, technology choices, or team velocity vs tech debt)
+
+CRITICAL GUIDELINES:
+1. STRICTLY NO GENERIC QUESTIONS: Avoid textbook trivia like "What is React?", "Hooks vs Classes", "What is an index?", or "Tell me about yourself".
+2. PRACTICAL & SCENARIO-DRIVEN: Frame questions around realistic production challenges, real-world systems, and situational scenarios.
+3. FOR EACH QUESTION: Provide a comprehensive, technical reference answer detailing expected architecture, best practices, and key concepts.
+
+Output strictly in JSON format as an array of 5 objects:
+[
+  {
+    "question": "Question text...",
+    "answer": "Comprehensive reference answer covering expected design, mechanics, and trade-offs..."
+  }
+]
+Do not include any explanation or text outside the JSON array.`;
 
     await dbConnect();
 
@@ -354,6 +371,10 @@ export async function completeAndEvaluateInterview(interviewId: string) {
         success: true,
         feedback: JSON.parse(JSON.stringify(interview.answers)),
         overallRating: interview.overallRating,
+        executiveSummary: interview.executiveSummary,
+        hiringVerdict: interview.hiringVerdict,
+        keyStrengths: interview.keyStrengths,
+        keyImprovements: interview.keyImprovements,
       };
     }
 
@@ -361,7 +382,7 @@ export async function completeAndEvaluateInterview(interviewId: string) {
      * PATTERN 4: ZERO WASTED AI TOKENS (Reference Answer Alignment)
      * Instead of asking Gemini to re-invent ideal answers from scratch (which consumes ~50%
      * of output tokens), we pass the pre-generated reference answers. Gemini only needs to
-     * output quantitative rating (1-10) and targeted feedback, cutting token costs and latency in half.
+     * output quantitative rating (1-10), targeted feedback, and executive hiring recommendation.
      */
     const questionsAndAnswers = interview.answers.map(
       (a: { question: string; answer: string }) => {
@@ -379,8 +400,9 @@ export async function completeAndEvaluateInterview(interviewId: string) {
       }
     );
 
-    const prompt = `You are a Principal Software Engineering hiring manager evaluating candidate answers for the position: ${interview.jobPosition}.
-Job Description: ${interview.jobDesc}
+    const prompt = `You are a Principal Software Engineering hiring manager conducting an executive evaluation for the role: ${interview.jobPosition}.
+Job Description / Tech Context: ${interview.jobDesc}
+Candidate Experience: ${interview.jobExperience} year(s)
 Questions and Candidate Answers: ${JSON.stringify(questionsAndAnswers)}.
 
 Evaluate each answer thoroughly across 3 industry-standard evaluation dimensions:
@@ -388,18 +410,30 @@ Evaluate each answer thoroughly across 3 industry-standard evaluation dimensions
 2. communication (1-10): Structure, STAR methodology, clarity, and conciseness.
 3. architectureTradeoffs (1-10): Awareness of trade-offs, scaling considerations, edge cases, and failure modes.
 
-Provide your response strictly in JSON format as an array of objects matching the answers:
-[
-  {
-    "question": "exact question text",
-    "technicalAccuracy": 1-10 (integer),
-    "communication": 1-10 (integer),
-    "architectureTradeoffs": 1-10 (integer),
-    "rating": 1-10 (overall composite integer score),
-    "feedback": "2-3 targeted, actionable sentences detailing candidate strengths and specific engineering improvements"
-  }
-]
-Do not include any other text or markdown formatting outside the JSON array.`;
+Also deliver an executive hiring committee assessment:
+- executiveSummary: 2-3 sentences delivering a high-level executive assessment of the candidate's engineering depth and interview performance.
+- hiringVerdict: Must be strictly one of: "STRONG HIRE", "HIRE", "LEAN HIRE", "NEEDS PRACTICE".
+- keyStrengths: Array of exactly 2-3 concise bullet points highlighting the candidate's biggest technical strengths.
+- keyImprovements: Array of exactly 2-3 targeted technical areas the candidate must study or refine.
+
+Provide your response strictly in JSON format as an object with this exact structure:
+{
+  "evaluations": [
+    {
+      "question": "exact question text",
+      "technicalAccuracy": 1-10,
+      "communication": 1-10,
+      "architectureTradeoffs": 1-10,
+      "rating": 1-10,
+      "feedback": "2-3 targeted, actionable sentences detailing candidate strengths and specific engineering improvements"
+    }
+  ],
+  "executiveSummary": "2-3 sentences summary...",
+  "hiringVerdict": "STRONG HIRE" | "HIRE" | "LEAN HIRE" | "NEEDS PRACTICE",
+  "keyStrengths": ["Strength 1", "Strength 2"],
+  "keyImprovements": ["Area 1", "Area 2"]
+}
+Do not include any explanation or markdown text outside the JSON object.`;
 
     const chatSession = model.startChat({
       generationConfig: generativeConfig,
@@ -410,9 +444,13 @@ Do not include any other text or markdown formatting outside the JSON array.`;
     const rawText = result.response.text();
 
     let mockJsonResp = rawText;
-    const jsonMatch = rawText.match(/\[[\s\S]*\]/);
-    if (jsonMatch) {
-      mockJsonResp = jsonMatch[0];
+    const objMatch = rawText.match(/\{[\s\S]*\}/);
+    const arrMatch = rawText.match(/\[[\s\S]*\]/);
+
+    if (objMatch) {
+      mockJsonResp = objMatch[0];
+    } else if (arrMatch) {
+      mockJsonResp = arrMatch[0];
     } else {
       mockJsonResp = rawText
         .replace(/```json/g, "")
@@ -420,7 +458,19 @@ Do not include any other text or markdown formatting outside the JSON array.`;
         .trim();
     }
 
-    let jsonFeedback: Array<{
+    let parsedResponse: Record<string, unknown> | Array<unknown>;
+
+    try {
+      parsedResponse = JSON.parse(mockJsonResp);
+    } catch (parseError) {
+      console.error("JSON Parsing Error in feedback:", parseError, "Raw:", rawText);
+      return {
+        success: false,
+        error: "Failed to parse AI evaluation. Please try again.",
+      };
+    }
+
+    interface EvaluationItem {
       question?: string;
       rating?: number;
       technicalAccuracy?: number;
@@ -428,16 +478,29 @@ Do not include any other text or markdown formatting outside the JSON array.`;
       architectureTradeoffs?: number;
       feedback?: string;
       idealAnswer?: string;
-    }>;
+    }
 
-    try {
-      jsonFeedback = JSON.parse(mockJsonResp);
-    } catch (parseError) {
-      console.error("JSON Parsing Error in feedback:", parseError, "Raw:", rawText);
-      return {
-        success: false,
-        error: "Failed to parse AI evaluation. Please try again.",
+    let jsonFeedback: EvaluationItem[] = [];
+    let executiveSummary: string | undefined;
+    let hiringVerdict: "STRONG HIRE" | "HIRE" | "LEAN HIRE" | "NEEDS PRACTICE" | undefined;
+    let keyStrengths: string[] = [];
+    let keyImprovements: string[] = [];
+
+    if (Array.isArray(parsedResponse)) {
+      jsonFeedback = parsedResponse as EvaluationItem[];
+    } else if (parsedResponse && typeof parsedResponse === "object") {
+      const obj = parsedResponse as {
+        evaluations?: EvaluationItem[];
+        executiveSummary?: string;
+        hiringVerdict?: "STRONG HIRE" | "HIRE" | "LEAN HIRE" | "NEEDS PRACTICE";
+        keyStrengths?: string[];
+        keyImprovements?: string[];
       };
+      jsonFeedback = Array.isArray(obj.evaluations) ? obj.evaluations : [];
+      if (typeof obj.executiveSummary === "string") executiveSummary = obj.executiveSummary;
+      if (typeof obj.hiringVerdict === "string") hiringVerdict = obj.hiringVerdict;
+      if (Array.isArray(obj.keyStrengths)) keyStrengths = obj.keyStrengths;
+      if (Array.isArray(obj.keyImprovements)) keyImprovements = obj.keyImprovements;
     }
 
     // Map feedback reliably by question match or index fallback
@@ -497,6 +560,40 @@ Do not include any other text or markdown formatting outside the JSON array.`;
 
     interview.overallRating =
       ratedCount > 0 ? Math.round(totalRating / ratedCount) : 0;
+
+    const fallbackVerdict =
+      interview.overallRating >= 8
+        ? "STRONG HIRE"
+        : interview.overallRating >= 7
+          ? "HIRE"
+          : interview.overallRating >= 5
+            ? "LEAN HIRE"
+            : "NEEDS PRACTICE";
+
+    interview.hiringVerdict = hiringVerdict || fallbackVerdict;
+
+    interview.executiveSummary =
+      executiveSummary ||
+      `Candidate completed the ${interview.jobPosition} session with an overall score of ${interview.overallRating}/10. Demonstrated ${
+        interview.overallRating >= 7 ? "solid" : "emerging"
+      } competence in core technical problem-solving with actionable avenues for architectural depth.`;
+
+    interview.keyStrengths =
+      keyStrengths.length > 0
+        ? keyStrengths
+        : [
+            "Demonstrated logical structure in formulating technical answers",
+            "Clear familiarity with primary framework and language patterns",
+          ];
+
+    interview.keyImprovements =
+      keyImprovements.length > 0
+        ? keyImprovements
+        : [
+            "Provide deeper analysis of scalability limits, concurrency, and trade-offs",
+            "Incorporate concrete metrics, SLAs, and production recovery strategies",
+          ];
+
     interview.status = "completed";
     interview.markModified("answers");
     await interview.save();
@@ -508,6 +605,10 @@ Do not include any other text or markdown formatting outside the JSON array.`;
       success: true,
       feedback: JSON.parse(JSON.stringify(interview.answers)),
       overallRating: interview.overallRating,
+      executiveSummary: interview.executiveSummary,
+      hiringVerdict: interview.hiringVerdict,
+      keyStrengths: interview.keyStrengths,
+      keyImprovements: interview.keyImprovements,
     };
   } catch (error: unknown) {
     console.error("Error evaluating interview:", error);
