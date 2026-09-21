@@ -226,7 +226,7 @@ try {
 
 ### 1. Clone & Install
 ```bash
-git clone https://github.com/rakibhassan01/mockmate-ai.git
+git clone https://github.com/justrakibhassan/mockmate-ai.git
 cd mockmate-ai
 npm install
 ```
@@ -252,8 +252,6 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 ```bash
 npm run dev
 ```
-
-Open [http://localhost:3000](http://localhost:3000) to view the application.
 
 ### 4. Production Build Validation
 ```bash
