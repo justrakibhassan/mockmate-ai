@@ -33,7 +33,7 @@ jobs:
       - name: Run Production Build
         run: npm run build
         env:
-          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_mock_clerk_publishable_key
+          NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_bW9jay1hcHAtMTIuY2xlcmsuYWNjb3VudHMuZGV2JA==
           CLERK_SECRET_KEY: sk_test_mock_clerk_secret_key
           MONGODB_URI: mongodb://localhost:27017/mockmate_ci
           GEMINI_API_KEY: mock_gemini_api_key
