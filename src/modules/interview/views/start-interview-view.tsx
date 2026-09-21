@@ -13,14 +13,22 @@ import {
   VideoOff,
   Loader2,
   RefreshCw,
+  Mic,
+  Square,
+  Sparkles,
+  PhoneOff,
+  Clock,
+  User,
+  Radio,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { RecordAnswer } from "../components/record-answer";
 import { completeAndEvaluateInterview } from "@/actions/interview";
+import SpeechRecognition from "react-speech-recognition";
 
 interface StartInterviewViewProps {
   interview: {
@@ -30,6 +38,14 @@ interface StartInterviewViewProps {
     answers?: { question: string }[];
   };
 }
+
+const QUESTION_STAGES = [
+  { tag: "Architecture & System Thinking", color: "border-blue-500/30 bg-blue-500/10 text-blue-400" },
+  { tag: "Technical Deep-Dive", color: "border-purple-500/30 bg-purple-500/10 text-purple-400" },
+  { tag: "Scalability, Caching & Performance", color: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400" },
+  { tag: "Production Debugging & Edge Cases", color: "border-amber-500/30 bg-amber-500/10 text-amber-400" },
+  { tag: "Trade-offs & Engineering Leadership", color: "border-rose-500/30 bg-rose-500/10 text-rose-400" },
+];
 
 function parseCameraError(err: unknown): string {
   if (typeof err === "string") return err;
@@ -46,6 +62,100 @@ function parseCameraError(err: unknown): string {
   return error?.message || "Failed to access camera.";
 }
 
+interface VoicePersona {
+  voice: SpeechSynthesisVoice | null;
+  name: string;
+}
+
+function getBestVoiceAndPersona(): VoicePersona {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    return { voice: null, name: "Sarah" };
+  }
+  const voices = window.speechSynthesis.getVoices();
+  if (!voices || voices.length === 0) {
+    return { voice: null, name: "Sarah" };
+  }
+
+  // 1. Prioritize natural sounding female English voices
+  const femaleVoice = voices.find(
+    (v) =>
+      v.lang.startsWith("en") &&
+      (v.name.includes("Samantha") ||
+        v.name.includes("Aria") ||
+        v.name.includes("Jenny") ||
+        v.name.includes("Zira") ||
+        v.name.includes("Sonia") ||
+        v.name.includes("Victoria") ||
+        v.name.includes("Karen") ||
+        v.name.includes("Google US English") ||
+        v.name.toLowerCase().includes("female") ||
+        v.name.includes("Natasha") ||
+        v.name.includes("Ava") ||
+        v.name.includes("Emma") ||
+        v.name.includes("Ana"))
+  );
+
+  if (femaleVoice) {
+    let name = "Sarah";
+    if (femaleVoice.name.includes("Samantha")) name = "Samantha";
+    else if (femaleVoice.name.includes("Aria")) name = "Aria";
+    else if (femaleVoice.name.includes("Jenny")) name = "Jenny";
+    else if (femaleVoice.name.includes("Victoria")) name = "Victoria";
+    else if (femaleVoice.name.includes("Zira")) name = "Zira";
+    else if (femaleVoice.name.includes("Emma")) name = "Emma";
+    else if (femaleVoice.name.includes("Karen")) name = "Karen";
+    else if (femaleVoice.name.includes("Sonia")) name = "Sonia";
+    else if (femaleVoice.name.includes("Natasha")) name = "Natasha";
+    else if (femaleVoice.name.includes("Ava")) name = "Ava";
+    else name = "Sarah";
+    return { voice: femaleVoice, name };
+  }
+
+  // 2. Check for male voices
+  const maleVoice = voices.find(
+    (v) =>
+      v.lang.startsWith("en") &&
+      (v.name.includes("Guy") ||
+        v.name.includes("David") ||
+        v.name.includes("Daniel") ||
+        v.name.includes("George") ||
+        v.name.toLowerCase().includes("male"))
+  );
+
+  if (maleVoice) {
+    let name = "Alex";
+    if (maleVoice.name.includes("Daniel")) name = "Daniel";
+    else if (maleVoice.name.includes("David")) name = "David";
+    else name = "Alex";
+    return { voice: maleVoice, name };
+  }
+
+  // 3. Fallback: Check if default voice is female
+  const fallback =
+    voices.find(
+      (v) => v.lang.startsWith("en") && !v.name.toLowerCase().includes("espeak")
+    ) || voices[0];
+
+  const isFemale =
+    /female|woman|girl|samantha|zira|aria|jenny|victoria|karen|susan|linda|sarah|google us english/i.test(
+      fallback?.name || ""
+    );
+
+  return {
+    voice: fallback || null,
+    name: isFemale ? "Sarah" : "Alex",
+  };
+}
+
+const emptySubscribe = () => () => {};
+function useMounted() {
+  return React.useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false
+  );
+}
+
 export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
   const [activeQuestionIndex, setActiveQuestionIndex] = useState(0);
   const [webcamEnabled, setWebcamEnabled] = useState(true);
@@ -55,8 +165,28 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
     () => new Set((interview.answers ?? []).map((a) => a.question))
   );
   const [speaking, setSpeaking] = useState(false);
+  const [candidateListening, setCandidateListening] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [startTime, setStartTime] = useState(() => Date.now());
+  const [questionSeconds, setQuestionSeconds] = useState(0);
+  const [persona, setPersona] = useState<VoicePersona>(() => getBestVoiceAndPersona());
+  const mounted = useMounted();
   const router = useRouter();
+
+  // Dynamically resolve and synchronize interviewer voice persona
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
+    const handleVoices = () => {
+      setPersona(getBestVoiceAndPersona());
+    };
+
+    handleVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", handleVoices);
+    return () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", handleVoices);
+    };
+  }, []);
 
   // Clean up media tracks when leaving the interview room
   useEffect(() => {
@@ -68,38 +198,66 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
     };
   }, []);
 
+  // Per-question timer without cascading setState in effect body
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setQuestionSeconds(Math.floor((Date.now() - startTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [startTime]);
+
   const questions = interview.questions;
   const progress = Math.round((answered.size / questions.length) * 100);
+  const currentStage = QUESTION_STAGES[activeQuestionIndex % QUESTION_STAGES.length];
 
-  // AI Text-to-Speech
-  const readQuestion = useCallback((text: string) => {
-    if ("speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95;
-      utterance.pitch = 1;
-      utterance.onstart = () => setSpeaking(true);
-      utterance.onend = () => setSpeaking(false);
-      utterance.onerror = () => setSpeaking(false);
-      window.speechSynthesis.speak(utterance);
-    }
-  }, []);
+  // Natural AI Text-to-Speech
+  const readQuestion = useCallback(
+    (text: string) => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(text);
+        const currentVoice = persona.voice || getBestVoiceAndPersona().voice;
+        if (currentVoice) {
+          utterance.voice = currentVoice;
+        }
+        utterance.rate = 0.96;
+        utterance.pitch = 1.0;
+        utterance.onstart = () => setSpeaking(true);
+        utterance.onend = () => setSpeaking(false);
+        utterance.onerror = () => setSpeaking(false);
+        window.speechSynthesis.speak(utterance);
+      }
+    },
+    [persona.voice]
+  );
 
   const stopSpeaking = useCallback(() => {
-    if ("speechSynthesis" in window) {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
       setSpeaking(false);
     }
   }, []);
 
+  const handleSwitchQuestion = useCallback(
+    (newIndex: number) => {
+      stopSpeaking();
+      SpeechRecognition.stopListening();
+      setActiveQuestionIndex(newIndex);
+      setStartTime(Date.now());
+      setQuestionSeconds(0);
+    },
+    [stopSpeaking]
+  );
+
+  // Auto-read question when switching questions
   useEffect(() => {
     readQuestion(questions[activeQuestionIndex]);
   }, [activeQuestionIndex, questions, readQuestion]);
 
-  // Otherwise the question keeps being read aloud after leaving the page.
+  // Clean up speech synthesis on unmount
   useEffect(() => {
     return () => {
-      if ("speechSynthesis" in window) {
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
         window.speechSynthesis.cancel();
       }
     };
@@ -119,6 +277,7 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
       return;
     }
     stopSpeaking();
+    SpeechRecognition.stopListening();
 
     if (answered.size === 0) {
       toast.warning("Please save an answer for at least one question before ending the interview.");
@@ -142,190 +301,250 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
     }
   };
 
+  const formatTimer = (secs: number) => {
+    const mins = Math.floor(secs / 60);
+    const remainingSecs = secs % 60;
+    return `${String(mins).padStart(2, "0")}:${String(remainingSecs).padStart(2, "0")}`;
+  };
+
   const cameraActive = webcamEnabled && !webcamError;
+  const isCurrentAnswered = answered.has(questions[activeQuestionIndex]);
+
+  if (!mounted) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background px-4 text-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <p className="text-sm font-medium text-muted-foreground animate-pulse">
+          Setting up secure virtual interview room...
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 pb-16">
-      {/* Sticky Session Bar */}
-      <div className="sticky top-0 z-20 -mx-4 mb-8 border-b border-border/70 bg-background/80 px-4 py-3 backdrop-blur-lg">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary shadow-md shadow-primary/25">
-              <BrainCircuit className="h-5 w-5 text-primary-foreground" />
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Top Meeting Header Bar (Google Meet Style) */}
+      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/80 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-3 py-2 sm:px-4 sm:py-2.5">
+          {/* Left: Meeting Details & Rec Badge */}
+          <div className="flex items-center gap-2 min-w-0 sm:gap-3">
+            <div className="flex items-center gap-1.5 rounded-full border border-rose-500/20 bg-rose-500/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-rose-500 shrink-0 sm:text-[11px] sm:px-2.5 sm:py-1">
+              <span className="relative flex h-1.5 w-1.5 sm:h-2 sm:w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75" />
+                <span className="relative inline-flex h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-rose-500" />
+              </span>
+              <span className="hidden xs:inline">REC · </span>LIVE
             </div>
+
+            <div className="hidden h-4 w-[1px] bg-border sm:block" />
+
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold text-foreground">
+              <p className="truncate text-xs font-bold text-foreground max-w-[110px] xs:max-w-[150px] sm:max-w-xs md:max-w-md sm:text-sm">
                 {interview.jobPosition}
               </p>
-              <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-                Live session · {answered.size}/{questions.length} answered
+              <p className="hidden text-[11px] text-muted-foreground sm:block">
+                MockMate AI Executive Technical Session
               </p>
             </div>
           </div>
 
-          <div className="hidden items-center gap-1.5 sm:flex">
-            {questions.map((question, index) => {
-              const isAnswered = answered.has(question);
-              const isActive = activeQuestionIndex === index;
-              return (
-                <button
-                  key={index}
-                  type="button"
-                  aria-label={`Question ${index + 1}${
-                    isAnswered ? " (answered)" : " (not answered)"
-                  }`}
-                  aria-current={isActive ? "step" : undefined}
-                  onClick={() => setActiveQuestionIndex(index)}
-                  className={`relative h-2.5 w-2.5 rounded-full transition-all duration-300 ${
-                    isAnswered
-                      ? "bg-emerald-500"
-                      : isActive
-                        ? "h-3 w-3 bg-primary"
-                        : "bg-border hover:bg-muted-foreground/40"
-                  } ${isActive ? "ring-4 ring-primary/15" : ""}`}
-                />
-              );
-            })}
+          {/* Center: Question Timer & Pacing */}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-1.5 rounded-full border border-border/70 bg-card/60 px-2.5 py-0.5 text-xs font-mono font-medium shadow-xs sm:px-3 sm:py-1">
+              <Clock className="h-3 w-3 text-primary sm:h-3.5 sm:w-3.5" />
+              <span>{formatTimer(questionSeconds)}</span>
+              <span className="hidden text-[10px] text-muted-foreground md:inline">
+                {questionSeconds > 150 ? "(Wrap up)" : "(Pace: ~2m)"}
+              </span>
+            </div>
           </div>
 
-          <Badge
-            variant="outline"
-            className="hidden shrink-0 border-emerald-500/20 bg-emerald-500/10 px-3 py-1 font-mono text-xs text-emerald-600 md:inline-flex dark:text-emerald-400"
-          >
-            {progress}% complete
-          </Badge>
-        </div>
-
-        {/* Progress rail */}
-        <div className="mt-3 h-1 overflow-hidden rounded-full bg-border">
-          <motion.div
-            className="h-full rounded-full bg-linear-to-r from-primary to-emerald-500"
-            initial={{ width: 0 }}
-            animate={{ width: `${progress}%` }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-          />
-        </div>
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-12">
-        {/* Left: Question Flow */}
-        <div className="space-y-6 lg:col-span-7">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeQuestionIndex}
-              initial={{ opacity: 0, x: 24 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -24 }}
-              transition={{ duration: 0.3, ease: "easeOut" }}
-              className="relative overflow-hidden rounded-2xl border border-border/70 bg-card/60 shadow-sm"
-            >
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-linear-to-b from-primary/6 to-transparent"
-              />
-
-              <div className="relative p-6 sm:p-8">
-                <div className="mb-5 flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
-                  {activeQuestionIndex + 1}
-                </span>
-                <span className="text-xs font-semibold tracking-widest text-muted-foreground uppercase">
-                  Question {activeQuestionIndex + 1} of {questions.length}
-                </span>
-                  </div>
-
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 rounded-full hover:bg-primary/10"
-                    onClick={() =>
-                      speaking
-                        ? stopSpeaking()
-                        : readQuestion(questions[activeQuestionIndex])
-                    }
-                    aria-label={
-                      speaking ? "Stop reading question" : "Read question aloud"
-                    }
+          {/* Right: Step Indicator & Completion Badge */}
+          <div className="flex items-center gap-2 shrink-0 sm:gap-3">
+            <div className="hidden items-center gap-1 sm:flex">
+              {questions.map((q, idx) => {
+                const isAns = answered.has(q);
+                const isCurr = activeQuestionIndex === idx;
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleSwitchQuestion(idx)}
+                    aria-label={`Jump to question ${idx + 1}`}
+                    className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold transition-all ${
+                      isCurr
+                        ? "bg-primary text-primary-foreground ring-2 ring-primary/20"
+                        : isAns
+                          ? "bg-emerald-500/20 text-emerald-500 border border-emerald-500/30 hover:bg-emerald-500/30"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    }`}
                   >
-                    {speaking ? (
-                      <VolumeX className="h-4.5 w-4.5 text-primary" />
-                    ) : (
-                      <Volume2 className="h-4.5 w-4.5 text-primary" />
-                    )}
-                  </Button>
-                </div>
+                    {isAns ? "✓" : idx + 1}
+                  </button>
+                );
+              })}
+            </div>
 
-                <p className="text-xl leading-relaxed font-medium text-foreground sm:text-2xl">
-                  {questions[activeQuestionIndex]}
-                </p>
-
-                <p className="mt-6 flex items-start gap-2 rounded-xl border border-border/70 bg-background/50 p-3.5 text-xs leading-relaxed text-muted-foreground">
-                  <span className="font-semibold text-primary">Tip:</span>
-                  Structure your answer with a concrete example — situation,
-                  action, result.
-                </p>
-              </div>
-            </motion.div>
-          </AnimatePresence>
-
-          {/* Answer Recorder */}
-          <div className="rounded-2xl border border-border/70 bg-card/60 p-6 shadow-sm sm:p-8">
-            <RecordAnswer
-              interviewId={interview._id}
-              activeQuestion={questions[activeQuestionIndex]}
-              onSaved={(question) =>
-                setAnswered((prev) => new Set(prev).add(question))
-              }
-            />
-          </div>
-
-          {/* Navigation Controls */}
-          <div className="flex items-center justify-between gap-3">
-            <Button
+            <Badge
               variant="outline"
-              size="lg"
-              disabled={activeQuestionIndex === 0}
-              onClick={() => setActiveQuestionIndex((prev) => prev - 1)}
-              className="h-12 px-6 font-semibold"
+              className="border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 sm:px-2.5 sm:text-xs"
             >
-              <ChevronLeft className="mr-1.5 h-4 w-4" /> Previous
-            </Button>
+              {progress}%<span className="hidden xs:inline">&nbsp;Done</span>
+            </Badge>
+          </div>
+        </div>
+      </header>
 
-            {activeQuestionIndex === questions.length - 1 ? (
-              <Button
-                size="lg"
-                disabled={completing}
-                className="h-12 bg-linear-to-r from-emerald-600 to-teal-500 px-6 font-bold shadow-lg shadow-emerald-500/25"
-                onClick={onEndInterview}
-              >
-                {completing ? (
+      {/* Main Conference Room Stage */}
+      <main className="mx-auto max-w-7xl px-3 py-3 sm:px-4 sm:py-6 space-y-3 sm:space-y-6">
+        {/* 2-Way Video Conference Grid */}
+        <div className="grid gap-3 sm:gap-6 lg:grid-cols-2">
+          {/* Tile 1: AI Lead Interviewer Tile */}
+          <div className="relative flex min-h-[300px] sm:min-h-[360px] md:min-h-[420px] flex-col justify-between overflow-hidden rounded-2xl border border-border/80 bg-slate-950 p-4 sm:p-5 shadow-xl">
+            {/* Ambient Lighting Gradient */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-radial from-primary/10 via-transparent to-transparent opacity-70"
+            />
+
+            {/* Top Bar of AI Tile */}
+            <div className="relative z-10 flex items-center justify-between">
+              <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/40 px-3 py-1 text-xs backdrop-blur-md">
+                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-white">
+                  <BrainCircuit className="h-3.5 w-3.5" />
+                </div>
+                <span className="font-semibold text-white">{persona.name}</span>
+                <span className="text-[10px] text-slate-400">· Lead AI Interviewer</span>
+              </div>
+
+              {/* AI Status Badge */}
+              <div className="flex items-center gap-2">
+                <Badge
+                  variant="outline"
+                  className={`border text-[11px] font-medium backdrop-blur-md ${
+                    speaking
+                      ? "border-cyan-500/40 bg-cyan-500/10 text-cyan-400 animate-pulse"
+                      : candidateListening
+                        ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-400"
+                        : "border-white/10 bg-black/30 text-slate-400"
+                  }`}
+                >
+                  {speaking ? (
+                    <span className="flex items-center gap-1.5">
+                      <Volume2 className="h-3 w-3" /> Speaking...
+                    </span>
+                  ) : candidateListening ? (
+                    <span className="flex items-center gap-1.5">
+                      <Radio className="h-3 w-3 animate-pulse" /> Listening to you...
+                    </span>
+                  ) : (
+                    "Ready"
+                  )}
+                </Badge>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 rounded-full border border-white/10 bg-black/40 text-slate-300 hover:bg-white/10 hover:text-white"
+                  onClick={() =>
+                    speaking ? stopSpeaking() : readQuestion(questions[activeQuestionIndex])
+                  }
+                  title={speaking ? "Stop voice" : "Re-read question"}
+                >
+                  {speaking ? (
+                    <VolumeX className="h-3.5 w-3.5 text-primary" />
+                  ) : (
+                    <Volume2 className="h-3.5 w-3.5" />
+                  )}
+                </Button>
+              </div>
+            </div>
+
+            {/* Center: Dynamic AI Avatar & Sound Waveform */}
+            <div className="relative z-10 my-auto flex flex-col items-center justify-center py-4 sm:py-6">
+              <div className="relative flex h-20 w-20 sm:h-28 sm:w-28 md:h-32 md:w-32 items-center justify-center">
+                {/* Sonic Pulses when AI is speaking */}
+                {speaking && (
                   <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Evaluating Responses...
-                  </>
-                ) : (
-                  <>
-                    End Interview <CheckCircle2 className="ml-2 h-4 w-4" />
+                    <span className="absolute inset-0 animate-ping rounded-full bg-primary/20" />
+                    <span className="absolute -inset-3 animate-pulse rounded-full border border-primary/30" />
                   </>
                 )}
-              </Button>
-            ) : (
-              <Button
-                size="lg"
-                className="h-12 px-6 font-semibold shadow-md shadow-primary/20"
-                onClick={() => setActiveQuestionIndex((prev) => prev + 1)}
-              >
-                Next Question <ChevronRight className="ml-1.5 h-4 w-4" />
-              </Button>
-            )}
-          </div>
-        </div>
 
-        {/* Right: Presence Panel */}
-        <div className="space-y-4 lg:col-span-5 lg:sticky lg:top-32">
-          <div className="relative aspect-video overflow-hidden rounded-2xl border border-border/70 bg-slate-950 shadow-lg">
+                {/* Avatar Circle */}
+                <div
+                  className={`flex h-18 w-18 sm:h-24 sm:w-24 md:h-28 md:w-28 items-center justify-center rounded-full border shadow-2xl transition-all duration-300 ${
+                    speaking
+                      ? "border-primary bg-linear-to-b from-primary/30 to-indigo-950/60 shadow-primary/40 ring-4 ring-primary/20"
+                      : candidateListening
+                        ? "border-emerald-500/60 bg-linear-to-b from-emerald-950/40 to-slate-950 shadow-emerald-500/20 ring-4 ring-emerald-500/20"
+                        : "border-white/10 bg-slate-900 shadow-black"
+                  }`}
+                >
+                  <Sparkles
+                    className={`h-8 w-8 sm:h-10 sm:w-10 md:h-12 md:w-12 transition-colors duration-300 ${
+                      speaking
+                        ? "text-cyan-400"
+                        : candidateListening
+                          ? "text-emerald-400"
+                          : "text-slate-400"
+                    }`}
+                  />
+                </div>
+              </div>
+
+              {/* Dynamic Equalizer Bars */}
+              <div className="mt-3 sm:mt-4 flex h-5 sm:h-6 items-center gap-1">
+                {[40, 70, 100, 60, 80, 50, 90].map((height, i) => (
+                  <motion.span
+                    key={i}
+                    animate={
+                      speaking
+                        ? { height: [`${Math.max(15, height * 0.2)}%`, `${height}%`, `${Math.max(20, height * 0.3)}%`] }
+                        : candidateListening
+                          ? { height: ["20%", "50%", "20%"] }
+                          : { height: "15%" }
+                    }
+                    transition={{
+                      repeat: Infinity,
+                      duration: speaking ? 0.4 + i * 0.08 : 1.2,
+                      ease: "easeInOut",
+                    }}
+                    className={`w-0.5 sm:w-1 rounded-full ${
+                      speaking
+                        ? "bg-primary"
+                        : candidateListening
+                          ? "bg-emerald-500"
+                          : "bg-slate-700"
+                    }`}
+                    style={{ minHeight: "4px" }}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Bottom: Question Closed-Captions Overlay */}
+            <div className="relative z-10 space-y-1.5 sm:space-y-2 rounded-xl border border-white/10 bg-black/60 p-3 sm:p-4 backdrop-blur-md">
+              <div className="flex items-center justify-between gap-2">
+                <Badge
+                  variant="outline"
+                  className={`text-[9px] sm:text-[10px] font-semibold tracking-wider uppercase ${currentStage.color}`}
+                >
+                  {currentStage.tag}
+                </Badge>
+                <span className="text-[10px] sm:text-[11px] font-medium text-slate-400">
+                  Question {activeQuestionIndex + 1} of {questions.length}
+                </span>
+              </div>
+
+              <p className="text-xs sm:text-sm md:text-base font-semibold text-white leading-snug">
+                {questions[activeQuestionIndex]}
+              </p>
+            </div>
+          </div>
+
+          {/* Tile 2: Candidate Live Camera Tile (You) */}
+          <div className="relative flex aspect-video min-h-[220px] sm:min-h-[360px] md:min-h-[420px] items-center justify-center overflow-hidden rounded-2xl border border-border/80 bg-slate-950 shadow-xl">
             {cameraActive ? (
               <Webcam
                 mirrored={true}
@@ -336,65 +555,135 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
                 onUserMediaError={(err) => {
                   setWebcamError(parseCameraError(err));
                 }}
-                className="h-full w-full object-cover opacity-80"
+                className="h-full w-full object-cover"
               />
             ) : (
-              <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-slate-950 p-6 text-center">
-                <div className="flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/5">
-                  <VideoOff className="h-6 w-6 text-amber-500" />
+              <div className="flex h-full w-full flex-col items-center justify-center gap-2 sm:gap-3 p-4 sm:p-6 text-center">
+                <div className="flex h-12 w-12 sm:h-16 sm:w-16 items-center justify-center rounded-full border border-white/10 bg-white/5">
+                  <User className="h-6 w-6 sm:h-8 sm:w-8 text-slate-400" />
                 </div>
                 <div className="max-w-xs space-y-1">
-                  <p className="text-sm font-semibold text-white">
-                    {webcamError ? "Camera Unavailable" : "Camera Off (Voice-Only Mode)"}
+                  <p className="text-xs sm:text-sm font-semibold text-white">
+                    {webcamError ? "Camera Unavailable" : "Camera is Paused"}
                   </p>
-                  {webcamError && (
-                    <p className="text-xs leading-relaxed text-slate-400">{webcamError}</p>
-                  )}
+                  <p className="text-[11px] sm:text-xs text-slate-400">
+                    {webcamError || "Voice-only mode is active. You can still answer via microphone."}
+                  </p>
                 </div>
                 <Button
                   size="sm"
                   variant="outline"
-                  type="button"
                   onClick={() => {
                     setWebcamError(null);
                     setWebcamEnabled(true);
                   }}
-                  className="mt-1 h-8 border-white/20 text-xs text-white hover:bg-white/10"
+                  className="mt-1 border-white/20 text-[11px] sm:text-xs text-white hover:bg-white/10"
                 >
-                  <RefreshCw className="mr-1.5 h-3 w-3" /> Retry Camera
+                  <RefreshCw className="mr-1.5 h-3 w-3 sm:h-3.5 sm:w-3.5" /> Enable Camera
                 </Button>
               </div>
             )}
 
-            <div className="pointer-events-none absolute inset-0 flex items-end bg-linear-to-t from-black/60 via-transparent to-transparent p-4">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/90 shadow-lg">
-                  {cameraActive ? (
-                    <Video className="h-4 w-4 text-white" />
-                  ) : (
-                    <VideoOff className="h-4 w-4 text-white" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold tracking-widest text-white/70 uppercase">
-                    Presence Camera
-                  </p>
-                  <p className="text-xs font-semibold text-white/90">
-                    {cameraActive ? "Live Preview" : "Voice / Text Mode"}
-                  </p>
-                </div>
-              </div>
+            {/* Top-Right Badge: Video Quality */}
+            <div className="absolute right-3 top-3 sm:right-4 sm:top-4 flex items-center gap-1.5 rounded-full border border-white/10 bg-black/50 px-2 py-0.5 sm:px-2.5 sm:py-1 text-[10px] sm:text-[11px] font-semibold text-white/90 backdrop-blur-md">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span>HD 720p</span>
             </div>
 
+            {/* Bottom Bar: Candidate Name & Mic Audio Level */}
+            <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-linear-to-t from-black/80 via-black/40 to-transparent p-3 sm:p-4">
+              <div className="flex items-center gap-1.5 sm:gap-2 rounded-full border border-white/10 bg-black/50 px-2.5 py-0.5 sm:px-3 sm:py-1 backdrop-blur-md">
+                <span className="text-[11px] sm:text-xs font-semibold text-white">You</span>
+                <span className="text-[9px] sm:text-[10px] text-slate-400">· Candidate</span>
+              </div>
+
+              {/* Live Mic Indicator */}
+              <div
+                className={`flex items-center gap-1 sm:gap-1.5 rounded-full border px-2 py-0.5 sm:px-2.5 sm:py-1 text-[11px] sm:text-xs font-medium backdrop-blur-md ${
+                  candidateListening
+                    ? "border-emerald-500/40 bg-emerald-500/20 text-emerald-400"
+                    : "border-white/10 bg-black/50 text-slate-400"
+                }`}
+              >
+                {candidateListening ? (
+                  <>
+                    <Mic className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-emerald-400" />
+                    <span className="text-[10px] sm:text-[11px] font-bold">Speaking</span>
+                    <div className="flex items-center gap-0.5 ml-1">
+                      <span className="h-2 w-0.5 sm:h-2.5 animate-pulse rounded-full bg-emerald-400 [animation-delay:0ms]" />
+                      <span className="h-3 w-0.5 sm:h-3.5 animate-pulse rounded-full bg-emerald-400 [animation-delay:150ms]" />
+                      <span className="h-1.5 w-0.5 sm:h-2 animate-pulse rounded-full bg-emerald-400 [animation-delay:300ms]" />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                    <span className="text-[10px] sm:text-[11px]">Mic Idle</span>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Live Answer Subtitles & Response Drawer */}
+        <RecordAnswer
+          interviewId={interview._id}
+          activeQuestion={questions[activeQuestionIndex]}
+          onSaved={(question) => setAnswered((prev) => new Set(prev).add(question))}
+          onListeningChange={setCandidateListening}
+          isSavedExternal={isCurrentAnswered}
+        />
+      </main>
+
+      {/* Floating Bottom Control Dock (Google Meet / Zoom Style) */}
+      <footer className="sticky bottom-2 sm:bottom-3 z-30 mx-auto max-w-3xl px-2 sm:px-4">
+        <div className="flex items-center justify-between gap-1.5 sm:gap-4 rounded-full border border-border/80 bg-background/95 p-1.5 sm:px-4 shadow-2xl backdrop-blur-xl">
+          {/* Left: Device Controls */}
+          <div className="flex items-center gap-1 sm:gap-2">
+            {/* Primary Mic Toggle */}
             <Button
               size="sm"
-              variant="ghost"
-              type="button"
-              className="absolute right-3 top-3 h-7 bg-black/40 text-[11px] font-semibold text-white/90 backdrop-blur-md hover:bg-black/60"
+              variant={candidateListening ? "destructive" : "default"}
+              onClick={() => {
+                if (candidateListening) {
+                  SpeechRecognition.stopListening();
+                } else {
+                  SpeechRecognition.startListening({ continuous: true });
+                }
+              }}
+              className={`h-9 sm:h-10 px-2.5 sm:px-4 rounded-full text-xs sm:text-sm font-semibold transition-all ${
+                candidateListening
+                  ? "bg-rose-600 hover:bg-rose-700 shadow-lg shadow-rose-600/30 text-white animate-pulse"
+                  : "shadow-md shadow-primary/20"
+              }`}
+            >
+              {candidateListening ? (
+                <>
+                  <Square className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-1.5 fill-current" />
+                  <span className="hidden sm:inline">Finish Speaking</span>
+                  <span className="sm:hidden">Finish</span>
+                </>
+              ) : (
+                <>
+                  <Mic className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Start Answering</span>
+                  <span className="sm:hidden">Answer</span>
+                </>
+              )}
+            </Button>
+
+            {/* Camera Toggle */}
+            <Button
+              variant="outline"
+              size="icon"
+              className={`h-9 w-9 sm:h-10 sm:w-10 rounded-full border-border/70 ${
+                !cameraActive ? "text-amber-500 bg-amber-500/10 border-amber-500/30" : ""
+              }`}
               onClick={() => {
                 if (webcamEnabled) {
                   if (videoStreamRef.current) {
-                    videoStreamRef.current.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+                    videoStreamRef.current.getTracks().forEach((t) => t.stop());
                     videoStreamRef.current = null;
                   }
                   setWebcamEnabled(false);
@@ -403,17 +692,89 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
                   setWebcamEnabled(true);
                 }
               }}
+              title={cameraActive ? "Turn off camera" : "Turn on camera"}
             >
-              {cameraActive ? "Turn Off" : "Turn On"}
+              {cameraActive ? <Video className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <VideoOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
+            </Button>
+
+            {/* Repeat Question Voice */}
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 sm:h-10 sm:w-10 rounded-full border-border/70"
+              onClick={() =>
+                speaking ? stopSpeaking() : readQuestion(questions[activeQuestionIndex])
+              }
+              title={`Replay ${persona.name}'s voice`}
+            >
+              {speaking ? (
+                <VolumeX className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-primary" />
+              ) : (
+                <Volume2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              )}
             </Button>
           </div>
 
-          <p className="flex items-center justify-center gap-1.5 text-center text-xs text-muted-foreground">
-            <VideoOff className="h-3.5 w-3.5" />
-            Self-monitoring only — no video is recorded or uploaded.
-          </p>
+          {/* Center / Right: Question Navigation & Submit */}
+          <div className="flex items-center gap-1 sm:gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={activeQuestionIndex === 0}
+              onClick={() => handleSwitchQuestion(activeQuestionIndex - 1)}
+              className="h-9 sm:h-10 rounded-full px-2 sm:px-3 text-xs font-semibold"
+            >
+              <ChevronLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-1" />
+              <span className="hidden md:inline">Previous</span>
+            </Button>
+
+            {activeQuestionIndex === questions.length - 1 ? (
+              <Button
+                size="sm"
+                disabled={completing}
+                onClick={onEndInterview}
+                className="h-9 sm:h-10 rounded-full bg-linear-to-r from-emerald-600 to-teal-500 px-3 sm:px-4 text-xs sm:text-sm font-bold shadow-lg shadow-emerald-600/25 text-white"
+              >
+                {completing ? (
+                  <>
+                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                    <span className="hidden sm:inline">Evaluating...</span>
+                    <span className="sm:hidden">Evaluating</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+                    <span className="hidden xs:inline">Finish Session</span>
+                    <span className="xs:hidden">Finish</span>
+                  </>
+                )}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => handleSwitchQuestion(activeQuestionIndex + 1)}
+                className="h-9 sm:h-10 rounded-full font-bold px-3 sm:px-4 text-xs sm:text-sm shadow-md shadow-primary/20"
+              >
+                <span className="hidden xs:inline">Next Question</span>
+                <span className="xs:hidden">Next</span>
+                <ChevronRight className="ml-1 h-3.5 w-3.5" />
+              </Button>
+            )}
+
+            {/* End Call Button (Google Meet Red Phone) */}
+            <Button
+              variant="destructive"
+              size="icon"
+              onClick={onEndInterview}
+              disabled={completing}
+              className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-rose-600 hover:bg-rose-700 shadow-md shadow-rose-600/30"
+              title="Leave / End Interview"
+            >
+              <PhoneOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            </Button>
+          </div>
         </div>
-      </div>
+      </footer>
     </div>
   );
 };

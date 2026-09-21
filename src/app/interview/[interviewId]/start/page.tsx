@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function StartInterviewPage({ params }: StartInterviewPageProps) {
   const { interviewId } = await params;
-  
+
   const result = await getInterviewDetails(interviewId);
 
   if (!result.success || !result.interview) {

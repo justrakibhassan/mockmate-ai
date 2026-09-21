@@ -4,9 +4,12 @@ import React from "react";
 import { AddInterviewDialog } from "../components/add-interview-dialog";
 import { InterviewList, type DashboardInterviewItem } from "../components/interview-list";
 import { motion } from "framer-motion";
-import { Zap, TrendingUp, Award, BrainCircuit } from "lucide-react";
+import { Zap, TrendingUp, Award, BrainCircuit, PlusCircle } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useRouter, useSearchParams } from "next/navigation";
+import { addDemoCredits } from "@/actions/user";
+import { toast } from "sonner";
 
 interface DashboardViewProps {
   plan?: string;
@@ -16,9 +19,43 @@ interface DashboardViewProps {
 
 export const DashboardView = ({
   plan = "Free",
-  credits = 0,
+  credits = 5,
   initialInterviews = [],
 }: DashboardViewProps) => {
+  const [currentCredits, setCurrentCredits] = React.useState(credits);
+  const [isAddingCredits, setIsAddingCredits] = React.useState(false);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  React.useEffect(() => {
+    setCurrentCredits(credits);
+  }, [credits]);
+
+  React.useEffect(() => {
+    if (searchParams?.get("success") === "true") {
+      toast.success("Payment confirmed! Your interview credits have been updated.");
+    } else if (searchParams?.get("canceled") === "true") {
+      toast.info("Payment was canceled.");
+    }
+  }, [searchParams]);
+
+  const handleAddDemoCredits = async () => {
+    setIsAddingCredits(true);
+    try {
+      const resp = await addDemoCredits(5);
+      if (resp.success && typeof resp.credits === "number") {
+        setCurrentCredits(resp.credits);
+        toast.success("Added 5 Free Demo Credits for testing!");
+        router.refresh();
+      } else {
+        toast.error("Failed to add demo credits");
+      }
+    } catch {
+      toast.error("Failed to add demo credits");
+    } finally {
+      setIsAddingCredits(false);
+    }
+  };
   const completedInterviews = initialInterviews.filter(
     (i) => i.status === "completed" && typeof i.overallRating === "number"
   );
@@ -80,17 +117,28 @@ export const DashboardView = ({
           <p className="mt-2 text-muted-foreground">
             Create a new mock interview or continue your journey.
           </p>
-          <div className="mt-3 flex items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
             <motion.div
               whileHover={{ scale: 1.02 }}
               className="group flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-3 py-1 shadow-sm transition-all hover:bg-primary/10"
             >
               <Zap className="h-3 w-3 text-primary" />
               <span className="text-[10px] font-bold uppercase tracking-wider text-primary/80">
-                {plan} Plan <span className="mx-1 opacity-20">|</span> {credits} Credits
+                {plan} Plan <span className="mx-1 opacity-20">|</span> {currentCredits} Credits
                 Left
               </span>
             </motion.div>
+
+            <button
+              type="button"
+              disabled={isAddingCredits}
+              onClick={handleAddDemoCredits}
+              className="inline-flex items-center gap-1 rounded-full border border-dashed border-primary/30 px-2.5 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary/5 transition-colors disabled:opacity-50"
+              title="Add 5 Free Demo Credits for portfolio testing"
+            >
+              <PlusCircle className="h-3 w-3" />
+              {isAddingCredits ? "Adding..." : "Add Free Test Credits"}
+            </button>
           </div>
         </div>
         <AddInterviewDialog />

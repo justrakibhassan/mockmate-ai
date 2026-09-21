@@ -51,10 +51,34 @@ export async function getUserSummary() {
     }
 
     await dbConnect();
-    const dbUser = await User.findOne({ clerkId: userId }).lean();
+    let dbUser = await User.findOne({ clerkId: userId }).lean();
+
+    // Auto-create user with 3 starter credits if not synced yet
+    if (!dbUser) {
+      const user = await currentUser();
+      if (user) {
+        dbUser = await User.findOneAndUpdate(
+          { clerkId: user.id },
+          {
+            clerkId: user.id,
+            email: user.emailAddresses[0]?.emailAddress || "",
+            name: `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+            imageUrl: user.imageUrl || "",
+            plan: "Free",
+            credits: 5,
+          },
+          {
+            upsert: true,
+            new: true,
+            setDefaultsOnInsert: true,
+          }
+        ).lean();
+      }
+    }
+
     return {
       plan: dbUser?.plan || "Free",
-      credits: dbUser?.credits ?? 0,
+      credits: dbUser?.credits ?? 5,
     };
   } catch (error) {
     console.error("Error fetching user summary:", error);
@@ -70,4 +94,25 @@ export async function getUserPlan() {
 export async function getUserCredits() {
   const summary = await getUserSummary();
   return summary.credits;
+}
+
+export async function addDemoCredits(amount = 5) {
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    await dbConnect();
+    const updated = await User.findOneAndUpdate(
+      { clerkId: userId },
+      { $inc: { credits: amount } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    return { success: true, credits: updated.credits };
+  } catch (err) {
+    console.error("Error adding demo credits:", err);
+    return { success: false, error: "Failed to add demo credits" };
+  }
 }

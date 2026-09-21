@@ -343,15 +343,15 @@ export const FeedbackView = ({
                     </span>
                     <Badge
                       variant="outline"
-                      className={`ml-auto hidden shrink-0 border font-bold sm:inline-flex ${scoreTone(item.rating)}`}
+                      className={`ml-auto shrink-0 border text-[11px] font-bold sm:text-xs ${scoreTone(item.rating)}`}
                     >
                       {item.rating}/10
                     </Badge>
                   </div>
                 </AccordionTrigger>
-                <AccordionContent className="space-y-5 px-5 pb-6 pt-1 sm:px-6">
+                <AccordionContent className="space-y-5 px-4 pb-5 pt-1 sm:px-6 sm:pb-6">
                   {/* Rubric chips */}
-                  <div className="grid grid-cols-3 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-2.5">
                     {rubrics.map(({ key, label }) => (
                       <div
                         key={key}
