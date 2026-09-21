@@ -20,9 +20,18 @@ import {
   Clock,
   User,
   Radio,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -167,6 +176,7 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
   const [speaking, setSpeaking] = useState(false);
   const [candidateListening, setCandidateListening] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [endDialogOpen, setEndDialogOpen] = useState(false);
   const [startTime, setStartTime] = useState(() => Date.now());
   const [questionSeconds, setQuestionSeconds] = useState(0);
   const [persona, setPersona] = useState<VoicePersona>(() => getBestVoiceAndPersona());
@@ -265,17 +275,16 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
 
   const unansweredCount = questions.length - answered.size;
 
-  const onEndInterview = async () => {
-    if (
-      unansweredCount > 0 &&
-      !window.confirm(
-        `You have ${unansweredCount} unanswered question${
-          unansweredCount === 1 ? "" : "s"
-        }. End the interview anyway?`
-      )
-    ) {
+  const handleRequestEnd = () => {
+    if (unansweredCount > 0 || answered.size === 0) {
+      setEndDialogOpen(true);
       return;
     }
+    proceedEndInterview();
+  };
+
+  const proceedEndInterview = async () => {
+    setEndDialogOpen(false);
     stopSpeaking();
     SpeechRecognition.stopListening();
 
@@ -288,7 +297,7 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
     try {
       const resp = await completeAndEvaluateInterview(interview._id);
       if (resp.success) {
-        toast.success("Interview completed! Loading your evaluation...");
+        toast.success("Interview completed! Generating executive report...");
         router.push(`/interview/${interview._id}/feedback`);
       } else {
         toast.error(resp.error || "Failed to evaluate interview.");
@@ -732,7 +741,7 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
               <Button
                 size="sm"
                 disabled={completing}
-                onClick={onEndInterview}
+                onClick={handleRequestEnd}
                 className="h-9 sm:h-10 rounded-full bg-linear-to-r from-emerald-600 to-teal-500 px-3 sm:px-4 text-xs sm:text-sm font-bold shadow-lg shadow-emerald-600/25 text-white"
               >
                 {completing ? (
@@ -765,7 +774,7 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
             <Button
               variant="destructive"
               size="icon"
-              onClick={onEndInterview}
+              onClick={handleRequestEnd}
               disabled={completing}
               className="h-9 w-9 sm:h-10 sm:w-10 rounded-full bg-rose-600 hover:bg-rose-700 shadow-md shadow-rose-600/30"
               title="Leave / End Interview"
@@ -775,6 +784,81 @@ export const StartInterviewView = ({ interview }: StartInterviewViewProps) => {
           </div>
         </div>
       </footer>
+
+      {/* End Interview Confirmation Modal */}
+      <Dialog open={endDialogOpen} onOpenChange={setEndDialogOpen}>
+        <DialogContent className="sm:max-w-md border-border/80 bg-background/95 backdrop-blur-xl p-6 shadow-2xl">
+          <DialogHeader className="space-y-3 text-left">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-500">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-bold text-foreground">
+                  End Interview Session?
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {interview.jobPosition} Session
+                </p>
+              </div>
+            </div>
+
+            <DialogDescription className="text-xs sm:text-sm leading-relaxed text-foreground/90 pt-1">
+              You have <span className="font-bold text-amber-500">{unansweredCount}</span> unanswered question{unansweredCount === 1 ? "" : "s"} out of <span className="font-semibold">{questions.length}</span> remaining.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="my-2 rounded-xl border border-border/70 bg-card/60 p-3.5 space-y-2 text-xs">
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span>Questions answered:</span>
+              <span className="font-bold text-foreground">{answered.size} of {questions.length}</span>
+            </div>
+            <div className="flex items-center justify-between text-muted-foreground">
+              <span>Evaluation status:</span>
+              <span className="font-bold text-foreground">
+                {answered.size > 0 ? "Ready to score saved answers" : "No answers saved yet"}
+              </span>
+            </div>
+            {answered.size === 0 && (
+              <p className="pt-1 text-rose-500 font-semibold flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                Please save at least 1 answer to generate your evaluation report.
+              </p>
+            )}
+          </div>
+
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEndDialogOpen(false)}
+              className="h-10 text-xs font-semibold"
+            >
+              Continue Answering
+            </Button>
+
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={completing || answered.size === 0}
+              onClick={proceedEndInterview}
+              className="h-10 text-xs font-bold bg-rose-600 hover:bg-rose-700 shadow-md shadow-rose-600/20"
+            >
+              {completing ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Evaluating...
+                </>
+              ) : (
+                <>
+                  <PhoneOff className="mr-1.5 h-3.5 w-3.5" />
+                  End Anyway & Evaluate
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

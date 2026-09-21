@@ -20,8 +20,17 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 export interface DashboardInterviewItem {
@@ -46,6 +55,7 @@ export const InterviewList = ({ initialInterviews }: InterviewListProps) => {
   );
   const [loading, setLoading] = useState(!initialInterviews);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DashboardInterviewItem | null>(null);
 
   useEffect(() => {
     if (initialInterviews) return;
@@ -66,20 +76,23 @@ export const InterviewList = ({ initialInterviews }: InterviewListProps) => {
     fetchInterviews();
   }, [initialInterviews]);
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const requestDelete = (item: DashboardInterviewItem, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    setDeleteTarget(item);
+  };
 
-    if (!window.confirm("Are you sure you want to delete this interview session? This cannot be undone.")) {
-      return;
-    }
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
 
-    setDeletingId(id);
+    const targetId = deleteTarget._id;
+    setDeletingId(targetId);
     try {
-      const resp = await deleteInterview(id);
+      const resp = await deleteInterview(targetId);
       if (resp.success) {
-        setInterviews((prev) => prev.filter((item) => item._id !== id));
+        setInterviews((prev) => prev.filter((item) => item._id !== targetId));
         toast.success("Interview session deleted.");
+        setDeleteTarget(null);
       } else {
         toast.error(resp.error || "Failed to delete interview.");
       }
@@ -163,7 +176,7 @@ export const InterviewList = ({ initialInterviews }: InterviewListProps) => {
                     className="h-7 w-7 rounded-lg text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors opacity-70 group-hover:opacity-100"
                     title="Delete Interview"
                     disabled={deletingId === interview._id}
-                    onClick={(e) => handleDelete(interview._id, e)}
+                    onClick={(e) => requestDelete(interview, e)}
                   >
                     {deletingId === interview._id ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -234,6 +247,72 @@ export const InterviewList = ({ initialInterviews }: InterviewListProps) => {
           </Card>
         );
       })}
+
+      {/* Delete Confirmation Modal */}
+      <Dialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open && !deletingId) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md border-border/80 bg-background/95 backdrop-blur-xl p-6 shadow-2xl">
+          <DialogHeader className="space-y-3 text-left">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-500">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-bold text-foreground">
+                  Delete Interview Session?
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <DialogDescription className="text-xs sm:text-sm leading-relaxed text-foreground/90 pt-1">
+              Are you sure you want to permanently delete the session for{" "}
+              <span className="font-semibold text-foreground">
+                &ldquo;{deleteTarget?.jobPosition}&rdquo;
+              </span>
+              ? All associated questions, speech responses, scores, and evaluation feedback will be permanently removed.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!!deletingId}
+              onClick={() => setDeleteTarget(null)}
+              className="h-10 text-xs font-semibold"
+            >
+              Keep Session
+            </Button>
+
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!!deletingId}
+              onClick={handleConfirmDelete}
+              className="h-10 text-xs font-bold bg-rose-600 hover:bg-rose-700 shadow-md shadow-rose-600/20"
+            >
+              {deletingId ? (
+                <>
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  Delete Permanently
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
